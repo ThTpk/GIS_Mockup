@@ -31,6 +31,82 @@ function setRole(r) {
   paintRolePill();
   toast(`สลับเป็นกลุ่มสิทธิ์: ${ROLES[r].name}`, 'check');
   document.dispatchEvent(new CustomEvent('rolechange', { detail: r }));
+  guardLinks();
+  /* ถ้ากลุ่มสิทธิ์ใหม่เข้าหน้าปัจจุบันไม่ได้ ให้โหลดหน้าใหม่เพื่อให้ตัวกันหน้าทำงาน */
+  if (!canAccess(location.pathname)) setTimeout(() => location.reload(), 600);
+}
+
+/* ---------- สิทธิ์การเข้าถึงรายหน้า ---------- */
+function pageOf(href) {
+  if (!href) return '';
+  return href.split('#')[0].split('?')[0].split('/').pop();
+}
+function canAccess(href, role) {
+  const page = pageOf(href);
+  const list = PAGE_ACCESS[page];
+  if (!list) return true;                       /* ไม่ได้กำหนดไว้ = เข้าได้ทุกกลุ่ม */
+  return list.includes(role || currentRole());
+}
+function allowedNames(href) {
+  return (PAGE_ACCESS[pageOf(href)] || []).map(r => ROLES[r].name).join(' · ');
+}
+function accessTitle(href) {
+  const reason = ACCESS_REASON[pageOf(href)];
+  return `เข้าถึงได้เฉพาะ: ${allowedNames(href)}${reason ? ' — ' + reason : ''}`;
+}
+
+/* ปิดลิงก์ทุกจุดในหน้าที่ชี้ไปยังหน้าที่กลุ่มสิทธิ์ปัจจุบันเข้าไม่ได้ */
+function guardLinks(scope) {
+  (scope || document).querySelectorAll('a[href], a[data-locked-href]').forEach(a => {
+    if (a.closest('.sidebar')) return;           /* เมนูข้างจัดการแยกตอนสร้าง */
+    const href = a.getAttribute('href') || a.dataset.lockedHref;
+    if (canAccess(href)) {
+      if (a.dataset.lockedHref) {
+        a.setAttribute('href', a.dataset.lockedHref);
+        delete a.dataset.lockedHref;
+        a.classList.remove('link-disabled');
+        a.removeAttribute('aria-disabled');
+        a.removeAttribute('title');
+        a.onclick = null;
+      }
+      return;
+    }
+    if (!a.dataset.lockedHref) a.dataset.lockedHref = href;
+    a.removeAttribute('href');
+    a.classList.add('link-disabled');
+    a.setAttribute('aria-disabled', 'true');
+    a.setAttribute('title', accessTitle(a.dataset.lockedHref));
+    a.onclick = e => {
+      e.preventDefault();
+      toast(`กลุ่มสิทธิ์ "${ROLES[currentRole()].name}" เข้าหน้านี้ไม่ได้`, 'lock');
+    };
+  });
+}
+window.addEventListener('load', () => guardLinks());
+
+/* หน้าสำหรับกรณีเปิด URL ตรงโดยไม่มีสิทธิ์ */
+function renderDenied(content, href) {
+  content.innerHTML = `
+    <div class="content-inner">
+      <div class="card" style="max-width:640px;margin:48px auto">
+        <div class="card-body" style="padding:36px 30px;text-align:center">
+          <div style="width:54px;height:54px;border-radius:50%;background:var(--warning-wash);
+               color:#b57c00;display:grid;place-items:center;margin:0 auto 16px;font-size:26px">${icon('lock')}</div>
+          <h1 style="font-size:1.25rem;margin-bottom:10px">ไม่มีสิทธิ์เข้าถึงหน้านี้</h1>
+          <p class="dim" style="font-size:.9rem;margin-bottom:6px">
+            กลุ่มสิทธิ์ปัจจุบันคือ <b>${ROLES[currentRole()].name}</b> ซึ่งไม่ได้รับสิทธิ์อ่านข้อมูลในหน้านี้</p>
+          <p class="small muted" style="margin-bottom:4px">เข้าถึงได้เฉพาะ: <b>${allowedNames(href)}</b></p>
+          ${ACCESS_REASON[pageOf(href)]
+            ? `<p class="small muted">${ACCESS_REASON[pageOf(href)]}</p>` : ''}
+          <div class="row" style="justify-content:center;margin-top:20px">
+            <a class="btn" href="index.html">กลับหน้าแรก</a>
+            <button class="btn btn-primary" data-switch-role>สลับกลุ่มสิทธิ์</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="content-inner" id="root" hidden aria-hidden="true"></div>`;
+  content.querySelector('[data-switch-role]').addEventListener('click', openRoleSwitcher);
 }
 function paintRolePill() {
   const r = ROLES[currentRole()];
@@ -105,8 +181,11 @@ function renderShell(activeHref) {
   side.innerHTML = NAV.map(g => `
     <div class="nav-group">
       <div class="nav-label">${g.label}</div>
-      ${g.items.map(i => `<a class="nav-item${i.href === activeHref ? ' active' : ''}" href="${i.href}">
-        ${icon(i.icon)}<span>${i.text}</span>${i.tag ? `<span class="tag">${i.tag}</span>` : ''}</a>`).join('')}
+      ${g.items.map(i => canAccess(i.href)
+        ? `<a class="nav-item${i.href === activeHref ? ' active' : ''}" href="${i.href}">
+             ${icon(i.icon)}<span>${i.text}</span>${i.tag ? `<span class="tag">${i.tag}</span>` : ''}</a>`
+        : `<span class="nav-item disabled" aria-disabled="true" title="${accessTitle(i.href)}">
+             ${icon(i.icon)}<span>${i.text}</span>${icon('lock', 'lk')}</span>`).join('')}
     </div>`).join('') + `
     <div class="nav-group" style="padding:0 10px">
       <div class="xsmall muted" style="border-top:1px solid var(--line);padding-top:12px;line-height:1.5">
@@ -149,6 +228,10 @@ function renderShell(activeHref) {
 
   setTheme(localStorage.getItem(THEME_KEY) || 'auto');
   paintRolePill();
+
+  /* กันหน้าเมื่อเปิด URL ตรงโดยกลุ่มสิทธิ์ที่ไม่มีสิทธิ์อ่าน */
+  if (!canAccess(activeHref)) renderDenied(content, activeHref);
+
   return content;
 }
 

@@ -42,16 +42,29 @@ ${pageHead({
             <button class="btn btn-primary" data-only="admin" id="btnAdd">${icon('plus')} เพิ่มผู้ใช้งาน</button>`
 })}
 
-<div data-only="viewer editor both" class="notice notice-warn mb16">${icon('warn')}<div>
-  <strong>สิทธิ์ปัจจุบันจัดการผู้ใช้งานไม่ได้</strong>
-  หน้านี้แสดงให้เห็นโครงสร้างสิทธิ์ แต่การเพิ่ม แก้ไข หรือเพิกถอนสิทธิ์สงวนไว้สำหรับ
-  <b>ผู้ดูแลระบบ</b> เท่านั้น และทุกการเปลี่ยนแปลงถูกบันทึกลงบันทึกการใช้งาน</div></div>
-
 <div class="grid g4 mb16" id="roleStats"></div>
 
 <div class="card mb16">
+  <div class="card-head"><h2>หน้าจอที่แต่ละกลุ่มเปิดได้</h2><span class="spacer"></span>
+    <span class="hint">ตารางที่ 3 — เมนูของหน้าที่เปิดไม่ได้จะถูกปิดและกดไม่ได้</span></div>
+  <div class="table-wrap">
+    <table class="tbl">
+      <thead><tr><th>หน้าจอ</th>
+        <th class="pm" title="ผู้อ่านข้อมูล">อ่าน</th>
+        <th class="pm" title="ผู้ป้อนข้อมูล">ป้อน</th>
+        <th class="pm" title="ผู้ใช้งานทั้งสองสิทธิ์">ทั้งสอง</th>
+        <th class="pm" title="ผู้ดูแลระบบ">ผู้ดูแล</th>
+        <th>เหตุผลที่จำกัดสิทธิ์</th></tr></thead>
+      <tbody id="pageAccess"></tbody>
+    </table>
+  </div>
+  <div class="card-foot">หน้าที่ไม่ได้ระบุข้อจำกัดไว้ เปิดได้ทุกกลุ่มสิทธิ์
+    การจำกัดนี้บังคับทั้งที่เมนู ที่ลิงก์ภายในหน้า และที่ตัวหน้าเองเมื่อเปิด URL ตรง</div>
+</div>
+
+<div class="card mb16">
   <div class="card-head"><h2>ตารางสิทธิ์ตามกลุ่มผู้ใช้งาน</h2><span class="spacer"></span>
-    <span class="hint">ตารางที่ 3 — สิทธิ์ 20 รายการเทียบ 4 กลุ่ม</span></div>
+    <span class="hint">ตารางที่ 4 — สิทธิ์รายการย่อยเทียบ 4 กลุ่ม</span></div>
   <div class="table-wrap">
     <table class="tbl">
       <thead><tr>
@@ -134,6 +147,22 @@ ${pageHead({
   </div>
 </div>
 `;
+
+const NAV_FLAT = NAV.flatMap(g => g.items);
+document.getElementById('pageAccess').innerHTML = NAV_FLAT
+  .filter(i => PAGE_ACCESS[i.href])
+  .map(i => {
+    const allow = PAGE_ACCESS[i.href];
+    const c = r => allow.includes(r)
+      ? `<span class="y">${icon('check')}</span>`
+      : `<span class="n">${icon('lock')}</span>`;
+    return `<tr>
+      <td><span class="row row-tight">${icon(i.icon)} <b>${i.text}</b></span>
+        <span class="xsmall mono muted">${i.href}</span></td>
+      <td class="pm">${c('viewer')}</td><td class="pm">${c('editor')}</td>
+      <td class="pm">${c('both')}</td><td class="pm">${c('admin')}</td>
+      <td class="small">${ACCESS_REASON[i.href] || '—'}</td></tr>`;
+  }).join('');
 
 document.getElementById('roleStats').innerHTML = Object.values(ROLES).map(r => {
   const n = USERS.filter(u => u.role === r.code).length;

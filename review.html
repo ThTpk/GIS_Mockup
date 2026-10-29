@@ -69,12 +69,6 @@ ${pageHead({
   actions: `<button class="btn" id="btnBatch" data-need="write-all">อนุมัติหลายรายการ</button>`
 })}
 
-<div data-only="viewer editor" class="notice notice-warn mb16">${icon('warn')}<div>
-  <strong>สิทธิ์ปัจจุบันตรวจสอบและอนุมัติไม่ได้</strong>
-  การอนุมัติหรือตีกลับรายการสงวนไว้สำหรับกลุ่ม <b>ผู้ใช้งานทั้งสองสิทธิ์</b> และ <b>ผู้ดูแลระบบ</b>
-  และผู้ป้อนข้อมูลจะอนุมัติรายการของตนเองไม่ได้ (แยกหน้าที่เพื่อการควบคุมภายใน)
-  สลับกลุ่มสิทธิ์ที่มุมขวาบนเพื่อดูหน้าจอฉบับเต็ม</div></div>
-
 <div class="grid g4 mb16">
   <div class="stat"><div class="lbl">รอตรวจทั้งหมด</div><div class="val num">${QUEUE.length}</div>
     <div class="foot">ใน 5 ชั้นข้อมูล</div></div>

@@ -765,3 +765,17 @@ body[data-role="editor"] [data-need="write-all"] { display: none !important; }
   .pill-role { max-width: 104px; padding: 0 9px; }
   .brand .brand-txt { font-size: .92rem; }
 }
+
+/* ---------- 21. รายการที่กลุ่มสิทธิ์ปัจจุบันเข้าไม่ได้ ---------- */
+.nav-item.disabled {
+  opacity: .42; cursor: not-allowed; user-select: none;
+}
+.nav-item.disabled:hover { background: transparent; color: var(--ink-2); }
+.nav-item .lk { margin-left: auto; width: 13px; height: 13px; flex: 0 0 13px; color: var(--ink-3); }
+
+a.link-disabled {
+  opacity: .42; cursor: not-allowed; text-decoration: none !important;
+  position: relative; filter: grayscale(.6);
+}
+a.link-disabled:hover { transform: none; box-shadow: var(--shadow-sm); }
+a.screencard.link-disabled .ic { background: var(--surface-3); color: var(--ink-3); }
