@@ -36,7 +36,8 @@ ${pageHead({
   title: 'บันทึกรายการใหม่',
   badge: badge('ร่าง · ยังไม่ส่งตรวจ', 'outline'),
   sub: 'ฟอร์มใช้ชุดฟิลด์มาตรฐานเดียวกันทุกชั้นข้อมูล ระบบตรวจค่าก่อนบันทึกและสร้างรหัสรายการให้อัตโนมัติ',
-  actions: `<button class="btn" id="btnCancel">ยกเลิก</button>
+  actions: `<a class="btn" href="import.html" data-need="write">${icon('upload')} นำเข้าจากไฟล์</a>
+            <button class="btn" id="btnCancel">ยกเลิก</button>
             <button class="btn" id="btnDraft">${icon('save')} บันทึกร่าง</button>
             <button class="btn btn-primary" id="btnSubmit">${icon('check')} ส่งเข้าคิวตรวจสอบ</button>`
 })}

@@ -605,6 +605,74 @@ CREATE TABLE app.export_job (
   expires_at   timestamptz NOT NULL DEFAULT now() + interval '24 hours'
 );
 
+-- ---- การนำเข้าข้อมูลจากไฟล์ภายนอก ----------------------------------
+-- รองรับ GeoJSON, KML/KMZ, Shapefile (ZIP), GeoPackage และ CSV ที่มีพิกัด
+-- ครอบคลุมรูปทรงทั้งสามแบบ: จุด เส้น และรูปปิด
+CREATE TABLE app.import_job (
+  import_uid      uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  import_code     varchar(16) NOT NULL UNIQUE,
+  file_name       varchar(255) NOT NULL,
+  file_format     varchar(16)  NOT NULL
+                    CHECK (file_format IN ('geojson','kml','kmz','shapefile','geopackage','csv')),
+  byte_size       bigint NOT NULL,
+  sha256          char(64) NOT NULL,
+  storage_key     text NOT NULL,            -- ไฟล์ต้นฉบับบน object storage (เก็บ 90 วัน)
+  target_layer    varchar(8) NOT NULL REFERENCES ref.layer_registry(layer_code),
+  source_srid     integer NOT NULL,         -- อ่านจาก .prj / CRS member หรือผู้ใช้ระบุ
+  source_encoding varchar(24) NOT NULL DEFAULT 'UTF-8',   -- รองรับ TIS-620 สำหรับ .dbf ภาษาไทย
+  source_geom_type varchar(32),             -- Point / LineString / Polygon / Multi*
+  feature_count   integer,
+  imported_count  integer,
+  rejected_count  integer,
+  duplicate_mode  varchar(16) NOT NULL DEFAULT 'skip'
+                    CHECK (duplicate_mode IN ('skip','update','new_code')),
+  target_status   ref.record_status NOT NULL DEFAULT 'draft',
+  auto_fix_geom   boolean NOT NULL DEFAULT true,   -- ST_MakeValid
+  status          varchar(16) NOT NULL DEFAULT 'uploaded'
+                    CHECK (status IN ('uploaded','mapping','validating','committing','done','failed','cancelled')),
+  report          jsonb,                    -- สรุปผลตรวจรายกฎและรายการที่ไม่ผ่าน
+  error_detail    text,
+  created_by      uuid REFERENCES app.user_account(user_uid),
+  created_at      timestamptz NOT NULL DEFAULT now(),
+  finished_at     timestamptz
+);
+COMMENT ON COLUMN app.import_job.storage_key IS
+  'เก็บไฟล์ต้นฉบับไว้เพื่อให้ตรวจสอบย้อนหลังได้ว่าข้อมูลแต่ละรายการมาจากไฟล์ใด';
+
+CREATE TABLE app.import_mapping (
+  import_uid    uuid REFERENCES app.import_job(import_uid) ON DELETE CASCADE,
+  source_field  varchar(128) NOT NULL,      -- Shapefile จำกัดชื่อไว้ 10 อักขระ
+  source_type   varchar(32),
+  target_field  varchar(64),                -- NULL = ไม่นำเข้าฟิลด์นี้
+  transform     varchar(32),                -- direct / date_yyyymmdd / agency_lookup / domain_lookup / boolean_tf
+  default_value text,                       -- ใช้เมื่อไฟล์ต้นทางไม่มีฟิลด์บังคับนั้น
+  value_map     jsonb,                      -- จับคู่ค่ารหัสต้นทางกับตารางค่าอ้างอิง
+  PRIMARY KEY (import_uid, source_field)
+);
+
+-- ตารางพัก: ใช้ชนิด geometry แบบทั่วไป จึงรับได้ทั้ง Point, LineString และ Polygon
+-- ก่อนแปลงให้ตรงชนิดของชั้นข้อมูลปลายทางด้วย ST_Multi หรือ ST_Dump
+CREATE TABLE app.import_staging (
+  import_uid   uuid REFERENCES app.import_job(import_uid) ON DELETE CASCADE,
+  row_no       integer NOT NULL,
+  raw_properties jsonb NOT NULL,
+  geom_src     geometry(Geometry, 0),       -- รูปทรงตามระบบพิกัดต้นทาง
+  geom_4326    geometry(Geometry, 4326),    -- หลัง ST_Transform
+  is_valid     boolean NOT NULL DEFAULT false,
+  findings     jsonb,                       -- รหัสกฎและข้อความที่ไม่ผ่าน
+  target_uid   uuid,                        -- feature_uid ที่สร้างขึ้นเมื่อ commit สำเร็จ
+  PRIMARY KEY (import_uid, row_no)
+);
+CREATE INDEX idx_import_staging_geom ON app.import_staging USING GIST (geom_4326);
+CREATE INDEX idx_import_staging_bad  ON app.import_staging (import_uid) WHERE NOT is_valid;
+
+-- ตัวอย่างการแปลงรูปทรงให้ตรงชนิดของชั้นข้อมูลปลายทางตอน commit
+-- INSERT INTO gis.public_space (feature_code, ..., geom)
+-- SELECT s.raw_properties ->> 'SPC_CODE', ...,
+--        ST_Multi(ST_CollectionExtract(ST_MakeValid(s.geom_4326), 3))
+-- FROM   app.import_staging s
+-- WHERE  s.import_uid = :import_uid AND s.is_valid;
+
 -- =====================================================================
 -- 9. ตัวชี้วัดและโครงการ
 -- =====================================================================

@@ -748,3 +748,20 @@ body[data-role="admin"]  [data-only~="admin"].notice { display: flex !important;
 /* ต้องมีสิทธิ์เขียนเต็ม (both / admin) — ผู้อ่านข้อมูลและผู้ป้อนข้อมูลไม่เห็น */
 body[data-role="viewer"] [data-need="write-all"],
 body[data-role="editor"] [data-need="write-all"] { display: none !important; }
+
+/* ---------- 19. ป้องกันเนื้อหาในกริด/สแต็กดันหน้าจนเลื่อนแนวนอน ---------- */
+.grid > *, .stack > *, .shell > * { min-width: 0; }
+.card, .table-wrap { min-width: 0; }
+
+/* ---------- 20. แถบด้านบนบนหน้าจอแคบ ---------- */
+@media (max-width: 680px) {
+  .topbar { gap: 8px; padding: 0 12px; }
+  .topbar [data-notif] { display: none; }
+  .pill-role { max-width: 132px; overflow: hidden; }
+  .pill-role .nowrap { overflow: hidden; text-overflow: ellipsis; }
+}
+@media (max-width: 480px) {
+  .avatar { display: none; }
+  .pill-role { max-width: 104px; padding: 0 9px; }
+  .brand .brand-txt { font-size: .92rem; }
+}

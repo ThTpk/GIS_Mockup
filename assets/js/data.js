@@ -61,6 +61,7 @@ const PERMISSIONS = [
   { g: 'การบันทึกข้อมูล',   p: 'ลบ/ยกเลิกใช้งานรายการ',           viewer: 'no',   editor: 'no',   both: 'full', admin: 'full' },
   { g: 'การบันทึกข้อมูล',   p: 'แนบภาพถ่ายและไฟล์หลักฐาน',         viewer: 'no',   editor: 'full', both: 'full', admin: 'full' },
   { g: 'การบันทึกข้อมูล',   p: 'สำรวจภาคสนามบนมือถือ (Offline)',   viewer: 'no',   editor: 'full', both: 'full', admin: 'full' },
+  { g: 'การบันทึกข้อมูล',   p: 'นำเข้าข้อมูลจากไฟล์ GIS',          viewer: 'no',   editor: 'full', both: 'full', admin: 'full' },
   { g: 'ตรวจสอบและคุณภาพ',  p: 'ส่งข้อมูลเข้าคิวตรวจสอบ',          viewer: 'no',   editor: 'full', both: 'full', admin: 'full' },
   { g: 'ตรวจสอบและคุณภาพ',  p: 'อนุมัติ / ตีกลับรายการ',           viewer: 'no',   editor: 'no',   both: 'full', admin: 'full' },
   { g: 'ตรวจสอบและคุณภาพ',  p: 'เรียกการตรวจคุณภาพ (QC Run)',      viewer: 'no',   editor: 'no',   both: 'full', admin: 'full' },
@@ -344,6 +345,23 @@ const API_GROUPS = [
     ]
   },
   {
+    g: 'Data Import (นำเข้าข้อมูล)', base: '/api/v1/imports', icon: 'upload',
+    desc: 'นำเข้าข้อมูลจุด เส้น และรูปปิด จากไฟล์ GeoJSON, KML/KMZ และ Shapefile พร้อมแปลงพิกัดและตรวจคุณภาพ',
+    eps: [
+      { m: 'GET',    p: '/import-formats',               d: 'รูปแบบไฟล์ ชนิดรูปทรง และข้อจำกัดขนาดที่ระบบรองรับ', role: 'ทุกกลุ่ม' },
+      { m: 'POST',   p: '/imports',                      d: 'อัปโหลดไฟล์และสร้างงานนำเข้า (multipart) ระบบตรวจรูปแบบและชนิดรูปทรงให้', role: 'editor, both, admin' },
+      { m: 'GET',    p: '/imports',                      d: 'ประวัติงานนำเข้าทั้งหมดและสถานะ', role: 'editor, both, admin' },
+      { m: 'GET',    p: '/imports/{importId}',           d: 'รายละเอียดงานนำเข้า — รูปแบบ ระบบพิกัด การเข้ารหัส และจำนวนรายการ', role: 'editor, both, admin' },
+      { m: 'GET',    p: '/imports/{importId}/fields',    d: 'ฟิลด์ต้นทางที่อ่านได้ พร้อมการจับคู่ฟิลด์ที่ระบบเสนอให้', role: 'editor, both, admin' },
+      { m: 'PUT',    p: '/imports/{importId}/mapping',   d: 'กำหนดการจับคู่ฟิลด์ ค่าตั้งต้น และการแปลงค่ารหัส', role: 'editor, both, admin' },
+      { m: 'GET',    p: '/imports/{importId}/preview',   d: 'ตัวอย่างข้อมูลหลังแปลงพิกัด คืนค่าเป็น GeoJSON สำหรับแสดงบนแผนที่', role: 'editor, both, admin' },
+      { m: 'POST',   p: '/imports/{importId}/validate',  d: 'ตรวจคุณภาพข้อมูลในตารางพักก่อนนำเข้าจริง', role: 'editor, both, admin' },
+      { m: 'POST',   p: '/imports/{importId}/commit',    d: 'บันทึกเข้าชั้นข้อมูลปลายทางภายใน transaction เดียว', role: 'editor, both, admin' },
+      { m: 'GET',    p: '/imports/{importId}/rejected',  d: 'ดาวน์โหลดรายการที่ไม่ผ่านเกณฑ์พร้อมเหตุผลรายบรรทัด (CSV)', role: 'editor, both, admin' },
+      { m: 'DELETE', p: '/imports/{importId}',           d: 'ยกเลิกงานนำเข้าและล้างตารางพัก', role: 'editor, both, admin' }
+    ]
+  },
+  {
     g: 'Quality Control', base: '/api/v1/qc', icon: 'shield',
     desc: 'ตรวจคุณภาพข้อมูลตามกฎที่กำหนด และติดตามการแก้ไขข้อค้นพบ',
     eps: [
@@ -564,6 +582,9 @@ const SYS_TABLES = [
   { s: 'app', t: 'attachment',          d: 'ไฟล์แนบ เก็บ metadata ในฐานข้อมูล ตัวไฟล์อยู่บน object storage', rows: '~8,400' },
   { s: 'app', t: 'survey_session',      d: 'รอบการสำรวจภาคสนาม ผู้สำรวจ อุปกรณ์ และความแม่นยำที่ใช้', rows: '~210' },
   { s: 'app', t: 'export_job',          d: 'งานส่งออกข้อมูลและสถานะ', rows: '~900' },
+  { s: 'app', t: 'import_job',          d: 'งานนำเข้าข้อมูลจากไฟล์ GeoJSON/KML/Shapefile พร้อมไฟล์ต้นฉบับและค่าแฮช', rows: '~120' },
+  { s: 'app', t: 'import_mapping',      d: 'การจับคู่ฟิลด์ต้นทางกับฟิลด์ปลายทางของแต่ละงานนำเข้า', rows: '~1,400' },
+  { s: 'app', t: 'import_staging',      d: 'ตารางพักข้อมูลที่อ่านจากไฟล์ ใช้ชนิด geometry แบบทั่วไปก่อนแปลงเข้าชั้นข้อมูลจริง', rows: 'ชั่วคราว' },
   { s: 'app', t: 'publication',         d: 'ชุดเผยแพร่แต่ละรุ่น พร้อมบัญชีไฟล์และรุ่นข้อมูล', rows: '~12' },
   { s: 'app', t: 'publication_profile', d: 'โปรไฟล์การเผยแพร่: ชั้นข้อมูล/ฟิลด์ที่ถูกตัดออก', rows: '3' },
   { s: 'qc',  t: 'qc_rule',             d: 'กฎการตรวจคุณภาพ พร้อมนิพจน์ SQL และระดับความรุนแรง', rows: '12' },
@@ -667,6 +688,7 @@ const NAV = [
   ]},
   { label: 'การบันทึกข้อมูล', items: [
     { href: 'data-entry.html',      icon: 'pencil', text: 'บันทึก/แก้ไขข้อมูล' },
+    { href: 'import.html',          icon: 'upload', text: 'นำเข้าข้อมูลจากไฟล์' },
     { href: 'mobile-survey.html',   icon: 'mobile', text: 'สำรวจภาคสนาม (มือถือ)' },
     { href: 'review.html',          icon: 'check',  text: 'คิวตรวจสอบและอนุมัติ', tag: '7' },
     { href: 'qc.html',              icon: 'shield', text: 'ตรวจคุณภาพข้อมูล' }

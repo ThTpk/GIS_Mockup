@@ -37,6 +37,8 @@ tags:
     description: การวิเคราะห์เชิงพื้นที่
   - name: survey
     description: การสำรวจภาคสนามและการซิงก์ข้อมูลออฟไลน์
+  - name: imports
+    description: นำเข้าข้อมูลจุด เส้น และรูปปิด จากไฟล์ GeoJSON, KML และ Shapefile
   - name: qc
     description: การตรวจคุณภาพข้อมูล
   - name: exports
@@ -313,6 +315,220 @@ paths:
                         reason: { type: string }
                         message: { type: string }
 
+  /import-formats:
+    get:
+      tags: [imports]
+      summary: รูปแบบไฟล์ ชนิดรูปทรง และข้อจำกัดที่ระบบรองรับ
+      responses:
+        "200":
+          description: สำเร็จ
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    format: { type: string, enum: [geojson, kml, kmz, shapefile, geopackage, csv] }
+                    extensions: { type: array, items: { type: string } }
+                    geometry_types:
+                      type: array
+                      items:
+                        type: string
+                        enum: [Point, MultiPoint, LineString, MultiLineString, Polygon, MultiPolygon]
+                    max_bytes: { type: integer }
+
+  /imports:
+    get:
+      tags: [imports]
+      summary: ประวัติงานนำเข้าข้อมูล
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Cursor"
+      responses:
+        "200":
+          description: สำเร็จ
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/ImportJob" }
+
+    post:
+      tags: [imports]
+      summary: อัปโหลดไฟล์และสร้างงานนำเข้า
+      description: |
+        รองรับรูปทรงทั้งสามแบบ — จุด (Point) เส้น (LineString) และรูปปิด (Polygon) รวมถึงชนิด Multi
+        ระบบอ่านระบบพิกัดจาก .prj หรือ CRS member และแปลงเป็น EPSG:4326 ด้วย ST_Transform เสมอ
+        ข้อมูลพักอยู่ในตาราง staging จนกว่าจะเรียก commit
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file, target_layer]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: .geojson .json .kml .kmz .zip (Shapefile) .gpkg .csv
+                target_layer: { type: string, example: L07 }
+                source_srid:
+                  type: integer
+                  description: ใช้เมื่อไฟล์ไม่ได้ระบุระบบพิกัดไว้เอง
+                  example: 32647
+                source_encoding:
+                  type: string
+                  enum: [UTF-8, TIS-620]
+                  description: การเข้ารหัสตารางคุณลักษณะ ใช้กับไฟล์ .dbf ภาษาไทย
+                duplicate_mode: { type: string, enum: [skip, update, new_code], default: skip }
+                target_status: { type: string, enum: [draft, submitted], default: draft }
+      responses:
+        "201":
+          description: สร้างงานนำเข้าสำเร็จ
+          headers:
+            Location: { schema: { type: string } }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ImportJob" }
+        "409":
+          description: ชนิดรูปทรงในไฟล์ไม่เข้ากับชั้นข้อมูลปลายทาง
+        "415":
+          description: รูปแบบไฟล์ไม่รองรับ
+        "422":
+          description: ไฟล์ไม่ครบองค์ประกอบ เช่น ZIP ของ Shapefile ขาด .shp .shx หรือ .dbf
+        "428":
+          description: ไฟล์ไม่ระบุระบบพิกัดและไม่ได้ส่ง source_srid มาด้วย
+
+  /imports/{importId}:
+    get:
+      tags: [imports]
+      summary: รายละเอียดงานนำเข้า
+      parameters:
+        - $ref: "#/components/parameters/ImportId"
+      responses:
+        "200":
+          description: สำเร็จ
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ImportJob" }
+    delete:
+      tags: [imports]
+      summary: ยกเลิกงานนำเข้าและล้างตารางพัก
+      parameters:
+        - $ref: "#/components/parameters/ImportId"
+      responses:
+        "204": { description: ยกเลิกสำเร็จ }
+
+  /imports/{importId}/fields:
+    get:
+      tags: [imports]
+      summary: ฟิลด์ต้นทางและการจับคู่ที่ระบบเสนอ
+      parameters:
+        - $ref: "#/components/parameters/ImportId"
+      responses:
+        "200":
+          description: สำเร็จ
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/FieldMapping" }
+
+  /imports/{importId}/mapping:
+    put:
+      tags: [imports]
+      summary: กำหนดการจับคู่ฟิลด์ ค่าตั้งต้น และการแปลงค่ารหัส
+      parameters:
+        - $ref: "#/components/parameters/ImportId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items: { $ref: "#/components/schemas/FieldMapping" }
+      responses:
+        "200": { description: บันทึกการจับคู่สำเร็จ }
+        "422":
+          description: ฟิลด์บังคับยังไม่มีค่าและไม่ได้กำหนดค่าตั้งต้น
+
+  /imports/{importId}/preview:
+    get:
+      tags: [imports]
+      summary: ตัวอย่างข้อมูลหลังแปลงพิกัด (GeoJSON)
+      parameters:
+        - $ref: "#/components/parameters/ImportId"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: สำเร็จ
+          content:
+            application/geo+json:
+              schema: { $ref: "#/components/schemas/FeatureCollection" }
+
+  /imports/{importId}/validate:
+    post:
+      tags: [imports]
+      summary: ตรวจคุณภาพข้อมูลในตารางพักก่อนนำเข้าจริง
+      parameters:
+        - $ref: "#/components/parameters/ImportId"
+      responses:
+        "200":
+          description: สำเร็จ
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ImportSummary" }
+
+  /imports/{importId}/commit:
+    post:
+      tags: [imports]
+      summary: บันทึกข้อมูลเข้าสู่ชั้นข้อมูลปลายทาง
+      description: ทำงานภายใน transaction เดียว หากล้มเหลวจะย้อนกลับทั้งหมด
+      parameters:
+        - $ref: "#/components/parameters/ImportId"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                auto_fix_geometry:
+                  type: boolean
+                  default: true
+                  description: แก้ไขรูปทรงที่ไม่ถูกต้องด้วย ST_MakeValid
+                multi_cast:
+                  type: boolean
+                  default: true
+                  description: แปลงรูปทรงให้ตรงชนิดปลายทางด้วย ST_Multi หรือ ST_Dump
+                duplicate_mode: { type: string, enum: [skip, update, new_code] }
+                target_status: { type: string, enum: [draft, submitted] }
+                abort_on_any_rejection: { type: boolean, default: false }
+      responses:
+        "200":
+          description: นำเข้าสำเร็จ
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ImportSummary" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "423": { description: งานนำเข้านี้กำลังถูกประมวลผลอยู่ }
+
+  /imports/{importId}/rejected:
+    get:
+      tags: [imports]
+      summary: ดาวน์โหลดรายการที่ไม่ผ่านเกณฑ์พร้อมเหตุผลรายบรรทัด
+      parameters:
+        - $ref: "#/components/parameters/ImportId"
+      responses:
+        "200":
+          description: ไฟล์ CSV
+          content:
+            text/csv:
+              schema: { type: string }
+
   /qc/runs:
     post:
       tags: [qc]
@@ -472,6 +688,12 @@ components:
       name: cursor
       in: query
       description: ตัวชี้หน้าถัดไปจากผลลัพธ์ก่อนหน้า (keyset pagination)
+      schema: { type: string }
+    ImportId:
+      name: importId
+      in: path
+      required: true
+      description: รหัสงานนำเข้า เช่น IMP-00120
       schema: { type: string }
     IdempotencyKey:
       name: Idempotency-Key
@@ -645,6 +867,106 @@ components:
             properties:
               rel: { type: string }
               href: { type: string }
+
+    ImportJob:
+      type: object
+      properties:
+        import_uid: { type: string, format: uuid }
+        import_code: { type: string, example: IMP-00120 }
+        status:
+          type: string
+          enum: [uploaded, mapping, validating, committing, done, failed, cancelled]
+        file:
+          type: object
+          properties:
+            name: { type: string }
+            format: { type: string, enum: [geojson, kml, kmz, shapefile, geopackage, csv] }
+            byte_size: { type: integer }
+            sha256: { type: string }
+            contents:
+              type: array
+              description: ไฟล์ภายใน ZIP กรณี Shapefile
+              items: { type: string }
+        detected:
+          type: object
+          properties:
+            geometry_type:
+              type: string
+              enum: [Point, MultiPoint, LineString, MultiLineString, Polygon, MultiPolygon]
+            feature_count: { type: integer }
+            source_srid: { type: integer }
+            source_srid_from: { type: string, enum: [prj_file, crs_member, user_input, default] }
+            encoding: { type: string }
+            encoding_from: { type: string, enum: [cpg_file, bom, user_input, detected] }
+            bbox: { type: array, items: { type: number }, minItems: 4, maxItems: 4 }
+            field_count: { type: integer }
+        geometry_compatibility:
+          type: object
+          properties:
+            source: { type: string }
+            target: { type: string }
+            compatible: { type: boolean }
+            transform: { type: string, example: "ST_Multi()" }
+        target_layer: { type: string }
+        created_by: { type: string, format: uuid }
+        created_at: { type: string, format: date-time }
+
+    FieldMapping:
+      type: object
+      properties:
+        source_field:
+          type: string
+          description: ชื่อฟิลด์ในไฟล์ต้นทาง (Shapefile จำกัดไว้ 10 อักขระ)
+          example: SPC_TYPE
+        source_type: { type: string, example: "C(24)" }
+        sample_value: { type: string }
+        target_field:
+          type: string
+          nullable: true
+          description: ค่า null หมายถึงไม่นำเข้าฟิลด์นี้
+          example: space_type_code
+        transform:
+          type: string
+          enum: [direct, date_yyyymmdd, agency_lookup, domain_lookup, boolean_tf]
+        default_value:
+          type: string
+          nullable: true
+          description: ใช้เมื่อไฟล์ต้นทางไม่มีฟิลด์บังคับนั้น
+        value_map:
+          type: object
+          additionalProperties: { type: string }
+          description: จับคู่ค่ารหัสต้นทางกับค่าในตารางอ้างอิง
+
+    ImportSummary:
+      type: object
+      properties:
+        import_code: { type: string }
+        status: { type: string }
+        summary:
+          type: object
+          properties:
+            read: { type: integer }
+            imported: { type: integer }
+            rejected: { type: integer }
+            skipped_duplicate: { type: integer }
+            geometry_fixed: { type: integer }
+            geometry_cast: { type: string }
+        findings:
+          type: array
+          items:
+            type: object
+            properties:
+              rule: { type: string, example: QC-03 }
+              severity: { type: string, enum: [critical, serious, warning] }
+              count: { type: integer }
+              message: { type: string }
+        created_features:
+          type: object
+          properties:
+            layer_code: { type: string }
+            record_status: { type: string }
+            feature_codes: { type: array, items: { type: string } }
+        rejected_rows_url: { type: string }
 
     QcRun:
       type: object

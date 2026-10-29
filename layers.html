@@ -25,7 +25,8 @@ ${pageHead({
   title: 'ทะเบียนชั้นข้อมูล',
   badge: badge('10 ชั้นข้อมูล', 'info'),
   sub: 'ชั้นข้อมูลใหม่ 8 ชั้นจากการสำรวจ และชั้นข้อมูลเดิมที่เชื่อมโยง 2 ชั้น รวมเป็นชุดใช้งานไม่น้อยกว่า 10 ชั้นข้อมูล',
-  actions: `<button class="btn" id="btnExport">${icon('download')} ส่งออกทะเบียน</button>
+  actions: `<a class="btn" href="import.html" data-need="write">${icon('upload')} นำเข้าข้อมูล</a>
+            <button class="btn" id="btnExport">${icon('download')} ส่งออกทะเบียน</button>
             <button class="btn btn-primary" data-only="admin" id="btnNew">${icon('plus')} ขึ้นทะเบียนชั้นข้อมูล</button>`
 })}
 

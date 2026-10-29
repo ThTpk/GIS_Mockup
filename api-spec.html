@@ -279,6 +279,132 @@ Content-Type: application/json
           'รายการที่ขัดแย้งยังอยู่ในเครื่องจนกว่าผู้สำรวจจะเลือกวิธีแก้ไข']
 },
 {
+  id: 'import', m: 'POST', p: '/imports', title: 'อัปโหลดไฟล์และสร้างงานนำเข้า',
+  role: 'ผู้ป้อนข้อมูล · ทั้งสองสิทธิ์ · ผู้ดูแลระบบ',
+  desc: 'อัปโหลดไฟล์ GeoJSON, KML/KMZ หรือ Shapefile (ZIP) ระบบตรวจรูปแบบไฟล์ อ่านชนิดรูปทรง ระบบพิกัด และการเข้ารหัสอักขระ แล้วแตกข้อมูลลงตารางพักโดยยังไม่เขียนลงชั้นข้อมูลจริง',
+  params: [
+    ['file', 'multipart', 'binary', 'ไฟล์ที่จะนำเข้า — .geojson .json .kml .kmz .zip .gpkg .csv', 'บังคับ'],
+    ['target_layer', 'multipart', 'string', 'รหัสชั้นข้อมูลปลายทาง เช่น L07', 'บังคับ'],
+    ['source_srid', 'multipart', 'integer', 'ระบบพิกัดต้นทาง ใช้เมื่อไฟล์ไม่ได้ระบุไว้เอง', 'อ่านจากไฟล์'],
+    ['source_encoding', 'multipart', 'string', 'การเข้ารหัสอักขระของตารางคุณลักษณะ (UTF-8 หรือ TIS-620)', 'ตรวจอัตโนมัติ'],
+    ['duplicate_mode', 'multipart', 'string', 'skip | update | new_code — วิธีจัดการรหัสรายการที่ซ้ำกับข้อมูลเดิม', 'skip'],
+    ['target_status', 'multipart', 'string', 'draft | submitted — สถานะของรายการที่นำเข้า', 'draft']
+  ],
+  req: `POST /api/v1/imports
+Authorization: Bearer <ACCESS_TOKEN>
+Content-Type: multipart/form-data; boundary=----X
+Idempotency-Key: 5a1e90c3-77bd-4e02-9a16-ff3c8102b4de
+
+------X
+Content-Disposition: form-data; name="file";
+                     filename="public_space_polygon.zip"
+Content-Type: application/zip
+
+<binary — ZIP ที่มี .shp .shx .dbf .prj .cpg>
+------X
+Content-Disposition: form-data; name="target_layer"
+
+L07
+------X
+Content-Disposition: form-data; name="duplicate_mode"
+
+skip
+------X--`,
+  res: `HTTP/1.1 201 Created
+Location: /api/v1/imports/IMP-00120
+
+{
+  "import_uid": "e42b7c10-55af-4d93-8b07-91c2ad640f77",
+  "import_code": "IMP-00120",
+  "status": "mapping",
+  "file": {
+    "name": "public_space_polygon.zip",
+    "format": "shapefile",
+    "byte_size": 65536,
+    "sha256": "9f21ac70be58...",
+    "contents": ["public_space.shp", "public_space.shx",
+                 "public_space.dbf", "public_space.prj",
+                 "public_space.cpg"]
+  },
+  "detected": {
+    "geometry_type": "Polygon",
+    "feature_count": 8,
+    "source_srid": 32647,
+    "source_srid_from": "prj_file",
+    "encoding": "TIS-620",
+    "encoding_from": "cpg_file",
+    "bbox": [101.1842, 12.8014, 101.3127, 12.8906],
+    "field_count": 10
+  },
+  "geometry_compatibility": {
+    "source": "Polygon",
+    "target": "MultiPolygon",
+    "compatible": true,
+    "transform": "ST_Multi()"
+  },
+  "next": "PUT /api/v1/imports/IMP-00120/mapping"
+}`,
+  errors: [['415 Unsupported Media Type', 'รูปแบบไฟล์ไม่อยู่ในรายการที่รองรับ'],
+           ['422 Unprocessable Entity', 'ZIP ของ Shapefile ขาดไฟล์ .shp .shx หรือ .dbf'],
+           ['409 Conflict', 'ชนิดรูปทรงในไฟล์ไม่เข้ากับชั้นข้อมูลปลายทาง เช่น นำจุดเข้าชั้นข้อมูลเส้น'],
+           ['428 Precondition Required', 'ไฟล์ไม่ระบุระบบพิกัด (ไม่มี .prj) และไม่ได้ส่ง source_srid มาด้วย']],
+  notes: ['รองรับรูปทรงทั้งสามแบบ — Point, LineString และ Polygon รวมถึงชนิด Multi ทุกแบบ',
+          'ระบบแปลงพิกัดเป็น EPSG:4326 ด้วย ST_Transform เสมอก่อนบันทึก',
+          'Shapefile ภาษาไทยที่เข้ารหัสแบบ TIS-620 จะถูกแปลงเป็น UTF-8 ให้อัตโนมัติเมื่อมีไฟล์ .cpg',
+          'ข้อมูลยังอยู่ในตารางพัก (app.import_staging) จนกว่าจะเรียก commit จึงยกเลิกได้โดยไม่กระทบชั้นข้อมูลจริง']
+},
+{
+  id: 'commit', m: 'POST', p: '/imports/{importId}/commit', title: 'บันทึกข้อมูลที่นำเข้าเข้าสู่ชั้นข้อมูล',
+  role: 'ผู้ป้อนข้อมูล · ทั้งสองสิทธิ์ · ผู้ดูแลระบบ',
+  desc: 'ย้ายข้อมูลจากตารางพักเข้าสู่ชั้นข้อมูลปลายทางภายใน transaction เดียว พร้อมแปลงชนิดรูปทรง แก้ไขรูปทรงที่ไม่ถูกต้อง และข้ามรายการที่ไม่ผ่านเกณฑ์',
+  req: `POST /api/v1/imports/IMP-00120/commit
+Authorization: Bearer <ACCESS_TOKEN>
+Content-Type: application/json
+
+{
+  "auto_fix_geometry": true,
+  "multi_cast": true,
+  "duplicate_mode": "skip",
+  "target_status": "draft",
+  "abort_on_any_rejection": false
+}`,
+  res: `HTTP/1.1 200 OK
+
+{
+  "import_code": "IMP-00120",
+  "status": "done",
+  "finished_at": "2026-10-29T11:08:34+07:00",
+  "summary": {
+    "read": 8,
+    "imported": 8,
+    "rejected": 0,
+    "skipped_duplicate": 0,
+    "geometry_fixed": 2,
+    "geometry_cast": "Polygon -> MultiPolygon (8 รายการ)"
+  },
+  "findings": [
+    { "rule": "QC-03", "severity": "serious", "count": 2,
+      "message": "รูปทรงไม่ถูกต้อง — แก้ไขด้วย ST_MakeValid แล้ว" },
+    { "rule": "QC-09", "severity": "warning", "count": 3,
+      "message": "ค่ารหัสต้นทางจับคู่ด้วยตารางแปลงค่าที่ผู้ใช้กำหนด" }
+  ],
+  "created_features": {
+    "layer_code": "L07",
+    "record_status": "draft",
+    "feature_codes": ["PS-0010", "PS-0011", "PS-0012", "PS-0013",
+                      "BD-01", "BD-02", "BD-03", "BD-07"]
+  },
+  "rejected_rows_url": "/api/v1/imports/IMP-00120/rejected"
+}`,
+  errors: [['409 Conflict', 'มีรายการที่รหัสซ้ำและเลือก duplicate_mode เป็น skip ไม่ได้เพราะ abort_on_any_rejection เป็น true'],
+           ['422 Unprocessable Entity', 'ยังไม่ได้กำหนดการจับคู่ฟิลด์ หรือฟิลด์บังคับยังไม่มีค่า'],
+           ['423 Locked', 'งานนำเข้านี้กำลังถูกประมวลผลอยู่แล้ว']],
+  notes: ['ทำงานภายใน transaction เดียว หากล้มเหลวระหว่างทางจะย้อนกลับทั้งหมด ไม่ทิ้งข้อมูลค้างในชั้นข้อมูล',
+          'รายการที่สร้างขึ้นมีสถานะ draft จึงยังไม่เข้าชุดข้อมูลหลักและชุดเผยแพร่จนกว่าจะผ่านการอนุมัติ',
+          'ทุกรายการที่สร้างจะมี source_ref อ้างถึงรหัสงานนำเข้าและชื่อไฟล์ต้นฉบับโดยอัตโนมัติ',
+          'การนำเข้าทั้งชุดบันทึกลง audit.change_log รายแถวเช่นเดียวกับการบันทึกด้วยมือ']
+},
+{
   id: 'nearby', m: 'GET', p: '/spatial/nearby', title: 'ค้นรายการใกล้พิกัดที่กำหนด',
   role: 'ผู้อ่านข้อมูล · ทั้งสองสิทธิ์ · ผู้ดูแลระบบ',
   desc: 'ค้นหารายการในหลายชั้นข้อมูลที่อยู่ในรัศมีที่กำหนดจากพิกัดหนึ่ง ประมวลผลด้วย ST_DWithin บนชนิด geography',

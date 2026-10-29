@@ -1,0 +1,740 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>นำเข้าข้อมูลเชิงพื้นที่ — GeoCore GIS</title>
+<link rel="icon" href="assets/img/favicon.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link rel="stylesheet" href="assets/css/app.css">
+<style>
+  .steps { display: flex; gap: 0; margin-bottom: 20px; flex-wrap: wrap; }
+  .steps .st { flex: 1 1 160px; display: flex; align-items: center; gap: 9px; padding: 11px 13px;
+    border: 1px solid var(--line); background: var(--surface-1); min-width: 0; }
+  .steps .st:first-child { border-radius: var(--r-md) 0 0 var(--r-md); }
+  .steps .st:last-child { border-radius: 0 var(--r-md) var(--r-md) 0; }
+  .steps .st + .st { border-left: 0; }
+  .steps .st .n { width: 24px; height: 24px; flex: 0 0 24px; border-radius: 50%; display: grid;
+    place-items: center; font-size: .74rem; font-weight: 700; background: var(--surface-3); color: var(--ink-3); }
+  .steps .st .t { font-size: .82rem; font-weight: 550; color: var(--ink-3); overflow: hidden;
+    text-overflow: ellipsis; white-space: nowrap; }
+  .steps .st.on { background: var(--accent-wash); border-color: color-mix(in srgb, var(--accent) 40%, transparent); }
+  .steps .st.on .n { background: var(--b500); color: #fff; }
+  .steps .st.on .t { color: var(--accent-ink); font-weight: 650; }
+  .steps .st.done .n { background: var(--good); color: #fff; }
+  .steps .st.done .t { color: var(--ink-1); }
+  @media (max-width: 680px) {
+    .steps .st { flex: 1 1 100%; border-radius: var(--r-md) !important; border-left: 1px solid var(--line) !important; }
+    .steps { gap: 6px; }
+  }
+
+  .drop { border: 2px dashed var(--line-strong); border-radius: var(--r-lg); padding: 34px 20px;
+    text-align: center; background: var(--surface-2); transition: border-color .15s, background .15s; }
+  .drop.hover { border-color: var(--accent); background: var(--accent-wash); }
+  .drop .big { width: 44px; height: 44px; margin: 0 auto 10px; color: var(--ink-3); }
+  .fmtcard { border: 1px solid var(--line); border-radius: var(--r-md); padding: 12px 13px; background: var(--surface-1); }
+  .fmtcard .h { display: flex; align-items: center; gap: 8px; font-weight: 650; font-size: .86rem; margin-bottom: 4px; }
+  .fmtcard .ext { font-family: var(--mono); font-size: .7rem; color: var(--accent-ink);
+    background: var(--accent-wash); padding: 1px 6px; border-radius: 4px; }
+  .pmap { height: 330px; border-radius: var(--r-md); overflow: hidden; border: 1px solid var(--line); }
+  .leaflet-container { font-family: var(--font); background: var(--surface-2); }
+  .geo-ok { color: var(--good-ink); font-weight: 600; }
+  .geo-no { color: var(--critical); font-weight: 600; }
+  table.map-tbl select, table.map-tbl input { min-height: 30px; font-size: .8rem; padding: 3px 7px; }
+</style>
+</head>
+<body>
+<main class="content"><div class="content-inner" id="root"></div></main>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="assets/js/data.js"></script>
+<script src="assets/js/geodata.js"></script>
+<script src="assets/js/shell.js"></script>
+<script>
+renderShell('import.html');
+const root = document.getElementById('root');
+
+/* ---------- รูปแบบไฟล์ที่รองรับ ---------- */
+const FORMATS = [
+  { id: 'geojson', name: 'GeoJSON', ext: '.geojson · .json', icon: 'globe', primary: true,
+    geom: 'Point · LineString · Polygon และชนิด Multi ทุกแบบ',
+    note: 'ระบบพิกัดตามมาตรฐานคือ EPSG:4326 หากไฟล์ระบุ CRS member อื่นจะอ่านค่านั้นมาใช้',
+    limit: 'สูงสุด 200 MB ต่อไฟล์' },
+  { id: 'kml', name: 'KML / KMZ', ext: '.kml · .kmz', icon: 'map', primary: true,
+    geom: 'Point · LineString · Polygon · MultiGeometry',
+    note: 'KML บังคับใช้ EPSG:4326 เสมอ ระบบอ่านทั้ง Placemark และโครงสร้าง Folder พร้อม ExtendedData',
+    limit: 'สูงสุด 100 MB (KMZ จะแตกไฟล์อัตโนมัติ)' },
+  { id: 'shp', name: 'Shapefile', ext: '.zip', icon: 'file', primary: true,
+    geom: 'Point · PolyLine · Polygon · MultiPoint (ตามชนิดใน .shp)',
+    note: 'อัปโหลดเป็นไฟล์ ZIP ที่มี .shp .shx .dbf และควรมี .prj ด้วย ระบบรองรับการเข้ารหัสภาษาไทยแบบ TIS-620 และ UTF-8',
+    limit: 'สูงสุด 200 MB ต่อ ZIP' },
+  { id: 'gpkg', name: 'GeoPackage', ext: '.gpkg', icon: 'db', primary: false,
+    geom: 'ทุกชนิดรูปทรง (เลือกชั้นข้อมูลภายในไฟล์ได้)',
+    note: 'รูปแบบเดียวกับที่ระบบใช้ส่งมอบ จึงนำเข้ากลับได้โดยไม่สูญเสียข้อมูล',
+    limit: 'สูงสุด 500 MB' },
+  { id: 'csv', name: 'CSV ที่มีพิกัด', ext: '.csv', icon: 'table', primary: false,
+    geom: 'Point เท่านั้น (ระบุคอลัมน์ละติจูด/ลองจิจูด หรือ WKT)',
+    note: 'ใช้กับข้อมูลที่เก็บจากแบบสำรวจหรือทะเบียนทรัพย์สินที่มีพิกัดอยู่แล้ว',
+    limit: 'สูงสุด 50 MB' }
+];
+
+/* ---------- ไฟล์ตัวอย่างสำหรับทดลอง (ครอบคลุมทั้ง 3 รูปทรง) ---------- */
+const DEMOS = {
+  geojson: {
+    file: 'road_survey_2569.geojson', fmt: 'GeoJSON', fmtId: 'geojson', size: '2.4 MB',
+    geomType: 'LineString', geomLabel: 'เส้น (Polyline)', count: ROAD_FEATS.length,
+    crs: 'EPSG:4326 — ระบุไว้ใน CRS member ของไฟล์', crsDetected: true, srid: 4326,
+    enc: 'UTF-8', encNote: 'ตรวจพบจาก byte order mark',
+    target: 'L01', features: ROAD_FEATS,
+    fields: [
+      ['road_code', 'string', 'RD-0101', 'feature_code'],
+      ['road_name', 'string', 'ถนนสายหลักกลางตำบล', 'name_th'],
+      ['road_class', 'string', 'main', 'road_class_code'],
+      ['surface', 'string', 'concrete', 'surface_code'],
+      ['condition', 'string', 'good', 'condition_code'],
+      ['width_m', 'number', '6.0', 'width_m'],
+      ['owner', 'string', 'อบจ.', 'owner_agency_id'],
+      ['maintainer', 'string', 'อบต.', 'maintainer_agency_id'],
+      ['survey_date', 'string', '2026-09-12', 'surveyed_on'],
+      ['doc_ref', 'string', 'บันทึก กช.123/2569', 'source_ref'],
+      ['remark', 'string', '—', 'description'],
+      ['shape_len', 'number', '4820.0', '']
+    ],
+    issues: [
+      { sev: 'critical', n: 3, msg: 'ไม่มีค่าในฟิลด์ที่จับคู่กับ source_ref (กฎ QC-01)', act: 'ไม่นำเข้า 3 รายการนี้' },
+      { sev: 'serious', n: 2, msg: 'รหัสรายการซ้ำกับข้อมูลเดิมในระบบ (RD-0101, RD-0117)', act: 'ตามตัวเลือกการจัดการรายการซ้ำ' },
+      { sev: 'warning', n: 5, msg: 'รูปทรงมีจุดซ้อนทับกันเอง (self-intersection)', act: 'แก้ไขอัตโนมัติด้วย ST_MakeValid' },
+      { sev: 'warning', n: 1, msg: 'พิกัดอยู่นอกแนวเขตพื้นที่ศึกษา (กฎ QC-04)', act: 'นำเข้าแต่ทำเครื่องหมายไว้ตรวจสอบ' }
+    ]
+  },
+  kml: {
+    file: 'cctv_points.kml', fmt: 'KML', fmtId: 'kml', size: '186 KB',
+    geomType: 'Point', geomLabel: 'จุด (Point)', count: CCTV_FEATS.length,
+    crs: 'EPSG:4326 — KML บังคับใช้ระบบพิกัดนี้เสมอ', crsDetected: true, srid: 4326,
+    enc: 'UTF-8', encNote: 'ตามข้อกำหนดของรูปแบบ KML',
+    target: 'L03', features: CCTV_FEATS,
+    fields: [
+      ['name', 'string', 'CC-00100', 'feature_code'],
+      ['description', 'string', 'กล้องหน้าตลาดชุมชน', 'name_th'],
+      ['cam_type', 'string', 'fixed', 'camera_type_code'],
+      ['status', 'string', 'active', 'status_code'],
+      ['azimuth', 'number', '135', 'view_azimuth_deg'],
+      ['range_m', 'number', '45', 'view_range_m'],
+      ['install_yr', 'number', '2566', 'install_year'],
+      ['survey_dt', 'string', '2026-10-14', 'surveyed_on'],
+      ['styleUrl', 'string', '#icon-1899', '']
+    ],
+    issues: [
+      { sev: 'critical', n: 0, msg: '—', act: '' },
+      { sev: 'serious', n: 1, msg: 'ไม่มีฟิลด์ต้นทางจับคู่กับ source_ref ซึ่งเป็นฟิลด์บังคับ', act: 'ต้องกำหนดค่าตั้งต้นในขั้นตอนจับคู่ฟิลด์' },
+      { sev: 'warning', n: 4, msg: 'จุดอยู่ห่างแนวถนนที่อ้างอิงเกิน 25 ม. (กฎ QC-07)', act: 'นำเข้าแต่ทำเครื่องหมายไว้ตรวจสอบ' }
+    ]
+  },
+  shp: {
+    file: 'public_space_polygon.zip', fmt: 'Shapefile (ZIP)', fmtId: 'shp', size: '64 KB',
+    geomType: 'Polygon', geomLabel: 'รูปปิด (Polygon)', count: PUBLIC_FEATS.length + BOUNDARY_FEATS.length,
+    crs: 'EPSG:32647 — อ่านจากไฟล์ .prj (UTM Zone 47N)', crsDetected: true, srid: 32647,
+    enc: 'TIS-620', encNote: 'ตรวจพบจากไฟล์ .cpg — ระบบจะแปลงเป็น UTF-8 ให้อัตโนมัติ',
+    target: 'L07', features: [...PUBLIC_FEATS, ...BOUNDARY_FEATS],
+    zipContent: ['public_space.shp  (42 KB)', 'public_space.shx  (1.2 KB)', 'public_space.dbf  (18 KB)',
+                 'public_space.prj  (489 B)', 'public_space.cpg  (8 B)'],
+    fields: [
+      ['SPC_CODE', 'C(32)', 'PS-0010', 'feature_code'],
+      ['SPC_NAME', 'C(100)', 'สวนสาธารณะและลานกีฬาชุมชน', 'name_th'],
+      ['SPC_TYPE', 'C(24)', 'park', 'space_type_code'],
+      ['CUR_USE', 'C(254)', 'ลานกีฬา ตลาดนัดวันเสาร์', 'current_use'],
+      ['CARETAKER', 'C(100)', 'คณะกรรมการหมู่บ้าน', 'caretaker_note'],
+      ['ALL_AGE', 'L', 'T', 'all_age_facility'],
+      ['AREA_SQM', 'N(12,2)', '4820.50', ''],
+      ['SURVEY_DT', 'D', '20260918', 'surveyed_on'],
+      ['REF_DOC', 'C(120)', 'บันทึกเวทีประชาคม หมู่ 3', 'source_ref'],
+      ['OWNER_AG', 'C(16)', 'อบต.', 'owner_agency_id']
+    ],
+    issues: [
+      { sev: 'critical', n: 0, msg: '—', act: '' },
+      { sev: 'serious', n: 2, msg: 'รูปทรงไม่ถูกต้อง — ขอบเขตวนทับตัวเอง (กฎ QC-03)', act: 'แก้ไขอัตโนมัติด้วย ST_MakeValid' },
+      { sev: 'warning', n: 3, msg: 'ชื่อฟิลด์ต้นทางถูกตัดเหลือ 10 อักขระตามข้อจำกัดของ Shapefile', act: 'จับคู่ฟิลด์ด้วยตนเองในขั้นตอนถัดไป' }
+    ]
+  }
+};
+
+/* ---------- ความเข้ากันได้ของรูปทรง ---------- */
+const TARGET_GEOM = {
+  L01: 'MultiLineString', L02: 'Point', L03: 'Point', L04: 'Point',
+  L05: 'Point', L06: 'LineString', L07: 'MultiPolygon', L08: 'MultiPolygon',
+  L09: 'MultiPolygon', L10: 'MultiPolygon'
+};
+const FAMILY = g => g.includes('Point') ? 'point' : g.includes('Line') ? 'line' : 'polygon';
+function compat(src, tgt) {
+  const a = FAMILY(src), b = FAMILY(tgt);
+  if (a !== b) return { ok: false, msg: `รูปทรงต้นทางเป็น${a === 'point' ? 'จุด' : a === 'line' ? 'เส้น' : 'รูปปิด'} แต่ชั้นข้อมูลปลายทางรับ${b === 'point' ? 'จุด' : b === 'line' ? 'เส้น' : 'รูปปิด'} — นำเข้าไม่ได้` };
+  if (tgt.startsWith('Multi') && !src.startsWith('Multi'))
+    return { ok: true, msg: `แปลงเป็น ${tgt} อัตโนมัติด้วย ST_Multi()` };
+  if (!tgt.startsWith('Multi') && src.startsWith('Multi'))
+    return { ok: true, msg: 'แยกรูปทรงรวมออกเป็นหลายรายการ (ST_Dump) — 1 ส่วนต่อ 1 รายการ' };
+  return { ok: true, msg: 'ชนิดรูปทรงตรงกัน นำเข้าได้โดยไม่ต้องแปลง' };
+}
+
+const CORE_REQUIRED = [
+  ['feature_code', 'รหัสรายการ', true],
+  ['name_th', 'ชื่อรายการ', false],
+  ['owner_agency_id', 'เจ้าของทรัพย์สิน', false],
+  ['maintainer_agency_id', 'ผู้บำรุงรักษา', false],
+  ['confirm_status_code', 'สถานะการยืนยัน', true],
+  ['source_ref', 'หลักฐานอ้างอิง', true],
+  ['source_type_code', 'ประเภทแหล่งข้อมูล', true],
+  ['surveyed_on', 'วันที่สำรวจ', true],
+  ['description', 'คำอธิบายข้อมูล', false]
+];
+
+let step = 1, cur = null, pmap = null, pLayer = null;
+
+/* ---------- โครงหน้า ---------- */
+root.innerHTML = `
+${pageHead({
+  crumbs: ['<a href="index.html">หน้าแรก</a>', 'นำเข้าข้อมูลเชิงพื้นที่'],
+  title: 'นำเข้าข้อมูลเชิงพื้นที่',
+  badge: badge('GeoJSON · KML · Shapefile', 'info'),
+  sub: 'นำเข้าข้อมูลจุด เส้น และรูปปิด จากไฟล์ภายนอกเข้าสู่ชั้นข้อมูลในระบบ พร้อมจับคู่ฟิลด์ แปลงระบบพิกัด และตรวจคุณภาพก่อนบันทึก',
+  actions: `<a class="btn" href="export.html">${icon('download')} ส่งออกข้อมูล</a>
+            <button class="btn" id="btnHist">${icon('history')} ประวัติการนำเข้า</button>`
+})}
+
+<div class="ro-banner">${icon('warn')}<span>สิทธิ์ <b>ผู้อ่านข้อมูล</b> นำเข้าข้อมูลไม่ได้ — หน้านี้แสดงเพื่อดูขั้นตอนการทำงานเท่านั้น</span></div>
+
+<div class="steps" id="steps"></div>
+
+<div id="panel"></div>
+
+<div class="card mt24" id="histCard">
+  <div class="card-head"><h2>ประวัติการนำเข้าข้อมูล</h2><span class="spacer"></span>
+    <span class="hint">เก็บไฟล์ต้นฉบับไว้ 90 วันเพื่อการตรวจสอบย้อนหลัง</span></div>
+  <div class="table-wrap">
+    <table class="tbl">
+      <thead><tr><th>รหัสงาน</th><th>ไฟล์</th><th>รูปแบบ</th><th>ชั้นข้อมูล</th>
+        <th class="num">อ่านได้</th><th class="num">นำเข้า</th><th class="num">ไม่ผ่าน</th>
+        <th>ผู้นำเข้า</th><th>เวลา</th><th>สถานะ</th></tr></thead>
+      <tbody id="hist"></tbody>
+    </table>
+  </div>
+  <div class="card-foot">ทุกครั้งที่นำเข้า ระบบบันทึกไฟล์ต้นฉบับ ค่าแฮช การจับคู่ฟิลด์ และผลการตรวจไว้ใน
+    <code>app.import_job</code> จึงตรวจสอบย้อนหลังได้ว่าข้อมูลแต่ละรายการมาจากไฟล์ใด</div>
+</div>
+`;
+
+/* ---------- ตัวบอกขั้นตอน ---------- */
+const STEP_NAMES = ['เลือกไฟล์', 'ตรวจไฟล์และระบบพิกัด', 'จับคู่ฟิลด์', 'ตรวจสอบและยืนยัน'];
+function paintSteps() {
+  document.getElementById('steps').innerHTML = STEP_NAMES.map((n, i) => {
+    const k = i + 1;
+    return `<div class="st ${k === step ? 'on' : k < step ? 'done' : ''}">
+      <span class="n">${k < step ? '✓' : k}</span><span class="t">${n}</span></div>`;
+  }).join('');
+}
+
+/* ---------- ขั้นตอนที่ 1 ---------- */
+function panel1() {
+  return `
+  <div class="grid g-2-1">
+    <div class="card">
+      <div class="card-head"><h2>เลือกไฟล์ที่จะนำเข้า</h2></div>
+      <div class="card-body">
+        <div class="drop" id="drop">
+          ${icon('upload', 'big')}
+          <div style="font-weight:600;margin-bottom:4px">ลากไฟล์มาวางที่นี่ หรือกดเพื่อเลือกไฟล์</div>
+          <div class="small muted">GeoJSON · KML / KMZ · Shapefile (ZIP) · GeoPackage · CSV ที่มีพิกัด</div>
+          <button class="btn btn-primary mt16" data-need="write" id="btnPick">${icon('file')} เลือกไฟล์จากเครื่อง</button>
+        </div>
+
+        <div class="notice notice-info mt16">${icon('info')}<div>
+          <strong>ทดลองด้วยไฟล์ตัวอย่าง</strong>
+          ต้นแบบนี้ไม่ได้อ่านไฟล์จริง เลือกไฟล์ตัวอย่างด้านล่างเพื่อดูขั้นตอนทั้งหมด
+          ซึ่งครอบคลุมรูปทรงทั้งสามแบบและไฟล์ทั้งสามรูปแบบ</div></div>
+
+        <div class="grid g3 mt16" style="gap:10px">
+          ${Object.keys(DEMOS).map(k => {
+            const d = DEMOS[k];
+            const l = LAYERS.find(x => x.code === d.target);
+            return `<button class="fmtcard" data-demo="${k}" style="cursor:pointer;text-align:left;font:inherit">
+              <span class="h">${symbolSwatch(l)} ${d.geomLabel}</span>
+              <span class="mono small" style="display:block;color:var(--ink-1);word-break:break-all">${d.file}</span>
+              <span class="xsmall muted" style="display:block;margin-top:4px">
+                ${d.fmt} · ${fmt(d.count)} รายการ · ${d.size}<br>ปลายทาง: ${l.code} ${l.name}</span>
+            </button>`;
+          }).join('')}
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h2>รูปแบบไฟล์ที่รองรับ</h2></div>
+      <div class="card-body">
+        ${FORMATS.map(f => `<div class="fmtcard mb8" ${f.primary ? '' : 'style="opacity:.82"'}>
+          <div class="h">${icon(f.icon)} ${f.name} <span class="ext">${f.ext}</span></div>
+          <div class="xsmall" style="color:var(--ink-2)"><b>รูปทรง:</b> ${f.geom}</div>
+          <div class="xsmall muted" style="margin-top:3px">${f.note}</div>
+          <div class="xsmall muted" style="margin-top:3px">${f.limit}</div>
+        </div>`).join('')}
+        <p class="xsmall muted" style="margin-bottom:0">สามรูปแบบแรกเป็นรูปแบบหลักตามข้อกำหนด
+          ส่วนอีกสองรูปแบบรองรับเพิ่มเติมเพื่อให้นำข้อมูลที่ส่งมอบไปแล้วกลับเข้าระบบได้</p>
+      </div>
+    </div>
+  </div>`;
+}
+
+/* ---------- ขั้นตอนที่ 2 ---------- */
+function panel2() {
+  const d = cur;
+  const tgt = TARGET_GEOM[d.target];
+  const c = compat(d.geomType, tgt);
+  const l = LAYERS.find(x => x.code === d.target);
+  return `
+  <div class="grid g-2-1">
+    <div class="stack">
+      <div class="card">
+        <div class="card-head"><h2>ผลการตรวจไฟล์</h2><span class="spacer"></span>
+          <span class="badge badge-good">${icon('check')} อ่านไฟล์สำเร็จ</span></div>
+        <div class="table-wrap">
+          <table class="tbl compact"><tbody>
+            <tr><td style="font-weight:600;background:var(--surface-2);width:190px">ชื่อไฟล์</td>
+              <td class="mono">${d.file} <span class="muted">(${d.size})</span></td></tr>
+            <tr><td style="font-weight:600;background:var(--surface-2)">รูปแบบที่ตรวจพบ</td>
+              <td>${d.fmt}</td></tr>
+            ${d.zipContent ? `<tr><td style="font-weight:600;background:var(--surface-2)">ไฟล์ภายใน ZIP</td>
+              <td class="mono xsmall">${d.zipContent.join('<br>')}</td></tr>` : ''}
+            <tr><td style="font-weight:600;background:var(--surface-2)">จำนวนรายการ</td>
+              <td><b class="num">${fmt(d.count)}</b> รายการ</td></tr>
+            <tr><td style="font-weight:600;background:var(--surface-2)">ชนิดรูปทรง</td>
+              <td><b>${d.geomType}</b> — ${d.geomLabel}</td></tr>
+            <tr><td style="font-weight:600;background:var(--surface-2)">จำนวนฟิลด์คุณลักษณะ</td>
+              <td>${d.fields.length} ฟิลด์</td></tr>
+            <tr><td style="font-weight:600;background:var(--surface-2)">ขอบเขตเชิงพื้นที่</td>
+              <td class="mono xsmall">101.1842, 12.8014, 101.3127, 12.8906</td></tr>
+          </tbody></table>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h2>ระบบพิกัดและการเข้ารหัสอักขระ</h2></div>
+        <div class="card-body">
+          <div class="inline-group">
+            <div class="field">
+              <label for="srcCrs">ระบบพิกัดของไฟล์ต้นทาง <span class="req">*</span></label>
+              <select id="srcCrs">${[
+                [4326, 'EPSG:4326 — WGS 84 (ละติจูด/ลองจิจูด)'],
+                [32647, 'EPSG:32647 — WGS 84 / UTM Zone 47N'],
+                [32648, 'EPSG:32648 — WGS 84 / UTM Zone 48N'],
+                [24047, 'EPSG:24047 — Indian 1975 / UTM Zone 47N']
+              ].map(o => `<option value="${o[0]}" ${o[0] === d.srid ? 'selected' : ''}>${o[1]}</option>`).join('')}</select>
+              <div class="hint">${d.crsDetected ? `${icon('check')} ตรวจพบอัตโนมัติ: ${d.crs}` : 'ไม่พบข้อมูลระบบพิกัดในไฟล์ ต้องระบุเอง'}</div>
+            </div>
+            <div class="field">
+              <label for="encSel">การเข้ารหัสอักขระ</label>
+              <select id="encSel">${['UTF-8', 'TIS-620', 'UTF-16']
+                .map(o => `<option ${o === d.enc ? 'selected' : ''}>${o === 'TIS-620' ? 'TIS-620 / Windows-874' : o}</option>`).join('')}</select>
+              <div class="hint">${icon('check')} ตรวจพบ: <b>${d.enc}</b> — ${d.encNote}</div>
+            </div>
+          </div>
+          <div class="notice notice-info" style="margin-bottom:0">${icon('info')}<div>
+            ระบบแปลงพิกัดเป็น <b>EPSG:4326</b> ก่อนบันทึกเสมอด้วย <code>ST_Transform</code>
+            เพื่อให้ทุกชั้นข้อมูลอยู่ในระบบพิกัดเดียวกัน หากเลือกระบบพิกัดผิด ข้อมูลจะไปตกนอกพื้นที่
+            และถูกกฎ QC-04 ตรวจจับได้ทันทีในขั้นตอนถัดไป</div></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h2>ชั้นข้อมูลปลายทางและความเข้ากันได้ของรูปทรง</h2></div>
+        <div class="card-body">
+          <div class="field">
+            <label for="tgtLayer">ชั้นข้อมูลปลายทาง <span class="req">*</span></label>
+            <select id="tgtLayer">${LAYERS.map(x =>
+              `<option value="${x.code}" ${x.code === d.target ? 'selected' : ''}>${x.code} · ${x.name} (${TARGET_GEOM[x.code]})</option>`).join('')}</select>
+          </div>
+          <div id="compatBox"></div>
+          <div class="table-wrap mt16" style="border:1px solid var(--line);border-radius:var(--r-md)">
+            <table class="tbl compact">
+              <thead><tr><th>รูปทรงต้นทาง</th><th>ชั้นข้อมูลที่รับได้</th><th>การแปลง</th></tr></thead>
+              <tbody>
+                <tr><td><b>Point</b> / MultiPoint</td><td class="small">L02 ไฟส่องสว่าง · L03 CCTV · L04 สะพาน · L05 แหล่งน้ำ · L06 จุดปัญหา · L07 จุดอัตลักษณ์</td>
+                  <td class="small">MultiPoint แยกเป็นหลายรายการด้วย ST_Dump</td></tr>
+                <tr><td><b>LineString</b> / MultiLineString</td><td class="small">L01 ถนน · L05 แนวท่อ · L06 ทางระบายน้ำ</td>
+                  <td class="small">LineString แปลงเป็น MultiLineString ด้วย ST_Multi</td></tr>
+                <tr><td><b>Polygon</b> / MultiPolygon</td><td class="small">L05 แหล่งน้ำ · L07 พื้นที่สาธารณะ · L08 แนวเขต · L09 แปลงที่ดิน · L10 สิ่งปลูกสร้าง</td>
+                  <td class="small">Polygon แปลงเป็น MultiPolygon ด้วย ST_Multi · ตรวจความถูกต้องด้วย ST_IsValid</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" style="align-self:start">
+      <div class="card-head"><h2>ตัวอย่างข้อมูลบนแผนที่</h2><span class="spacer"></span>
+        <span class="hint">${fmt(d.count)} รายการ</span></div>
+      <div class="card-body">
+        <div class="pmap" id="pmap"></div>
+        <div class="legend mt16">
+          <span class="li"><span class="sw" style="background:var(--s2)"></span>ข้อมูลที่กำลังนำเข้า</span>
+          <span class="li"><span class="sw" style="background:transparent;border:2px dashed var(--s8)"></span>แนวเขตพื้นที่ศึกษา</span>
+        </div>
+        <p class="small muted mt16" style="margin-bottom:0">แสดงตำแหน่งหลังแปลงเป็น EPSG:4326 แล้ว
+          ใช้ตรวจด้วยสายตาว่าข้อมูลตกในพื้นที่ถูกต้องก่อนนำเข้าจริง</p>
+      </div>
+    </div>
+  </div>`;
+}
+
+/* ---------- ขั้นตอนที่ 3 ---------- */
+function panel3() {
+  const d = cur;
+  const specFields = (DICT.find(x => x.code === d.target) || { fields: [] }).fields;
+  const targets = [
+    ...CORE_REQUIRED.map(c => ({ f: c[0], label: c[1], req: c[2], core: true })),
+    ...specFields.map(f => ({ f: f.f, label: f.d.split(':')[0].split('(')[0].trim(), req: /NOT NULL/.test(f.n), core: false }))
+  ];
+  const mapped = new Set(d.fields.map(f => f[3]).filter(Boolean));
+  const unmappedReq = targets.filter(t => t.req && !mapped.has(t.f));
+
+  return `
+  <div class="card mb16">
+    <div class="card-head"><h2>จับคู่ฟิลด์ต้นทางกับฟิลด์ปลายทาง</h2><span class="spacer"></span>
+      <span class="hint">จับคู่อัตโนมัติแล้ว ${d.fields.filter(f => f[3]).length} จาก ${d.fields.length} ฟิลด์ — แก้ไขได้</span></div>
+    <div class="table-wrap">
+      <table class="tbl compact map-tbl">
+        <thead><tr>
+          <th style="width:170px">ฟิลด์ต้นทาง</th><th style="width:90px">ชนิด</th>
+          <th style="width:190px">ค่าตัวอย่าง</th><th></th><th style="width:230px">ฟิลด์ปลายทาง</th>
+          <th style="width:180px">การแปลงค่า</th></tr></thead>
+        <tbody>
+          ${d.fields.map((f, i) => `<tr>
+            <td class="mono small"><b>${f[0]}</b></td>
+            <td class="mono xsmall muted">${f[1]}</td>
+            <td class="small" style="word-break:break-word">${f[2]}</td>
+            <td class="center muted">→</td>
+            <td><select data-mapsel="${i}">
+              <option value="">— ไม่นำเข้าฟิลด์นี้ —</option>
+              ${targets.map(t => `<option value="${t.f}" ${t.f === f[3] ? 'selected' : ''}>${t.f}${t.req ? ' *' : ''} — ${t.label}</option>`).join('')}
+            </select></td>
+            <td class="small">${transformNote(f, d)}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>
+    <div class="card-foot">
+      ${d.fmtId === 'shp'
+        ? `${icon('info')} Shapefile จำกัดชื่อฟิลด์ไว้ 10 อักขระ ชื่อต้นทางจึงเป็นตัวย่อ — ตรวจการจับคู่ด้วยตาอีกครั้งก่อนไปขั้นถัดไป`
+        : `${icon('info')} ระบบเดาการจับคู่จากชื่อฟิลด์และชนิดข้อมูล ผู้ใช้แก้ไขได้ทุกแถว`}
+    </div>
+  </div>
+
+  <div class="grid g2">
+    <div class="card">
+      <div class="card-head"><h2>ฟิลด์บังคับที่ยังไม่มีค่า</h2><span class="spacer"></span>
+        ${unmappedReq.length
+          ? `<span class="badge badge-warning">${unmappedReq.length} ฟิลด์</span>`
+          : `<span class="badge badge-good">ครบแล้ว</span>`}</div>
+      <div class="card-body">
+        ${unmappedReq.length ? `
+          <p class="small dim">ฟิลด์เหล่านี้เป็นฟิลด์บังคับของทุกชั้นข้อมูล เมื่อไฟล์ต้นทางไม่มีข้อมูล
+            ให้กำหนดค่าตั้งต้นที่จะใส่ให้ทุกรายการที่นำเข้าในครั้งนี้</p>
+          ${unmappedReq.map(t => `<div class="field">
+            <label>${t.f} <span class="req">*</span> <span class="muted" style="font-weight:400">— ${t.label}</span></label>
+            ${defaultControl(t.f, d)}
+          </div>`).join('')}`
+          : `<div class="notice notice-good" style="margin-bottom:0">${icon('check')}<div>
+             ฟิลด์บังคับทุกฟิลด์มีค่าจากไฟล์ต้นทางแล้ว ไม่ต้องกำหนดค่าตั้งต้นเพิ่ม</div></div>`}
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h2>การแปลงค่ารหัสให้ตรงตารางอ้างอิง</h2></div>
+      <div class="card-body">
+        <p class="small dim">ค่ารหัสในไฟล์ต้นทางต้องตรงกับตารางค่าอ้างอิงของระบบ (กฎ QC-09)
+          ค่าที่จับคู่ไม่ได้จะถูกแสดงให้เลือกด้วยตนเอง</p>
+        <div class="table-wrap" style="border:1px solid var(--line);border-radius:var(--r-md)">
+          <table class="tbl compact">
+            <thead><tr><th>ค่าในไฟล์</th><th>จำนวน</th><th>ค่าในระบบ</th></tr></thead>
+            <tbody>${domainRows(d)}</tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+
+function transformNote(f, d) {
+  if (!f[3]) return '<span class="muted">—</span>';
+  if (f[3] === 'surveyed_on') return d.fmtId === 'shp' ? 'แปลงรูปแบบวันที่ YYYYMMDD' : 'แปลงเป็นชนิด date';
+  if (f[3].endsWith('_agency_id')) return 'จับคู่ชื่อย่อหน่วยงานกับ ref.agency';
+  if (f[3].endsWith('_code')) return 'ตรวจกับตารางค่าอ้างอิง';
+  if (f[3] === 'all_age_facility') return 'แปลง T/F เป็น boolean';
+  if (f[3] === 'feature_code') return 'ตรวจความไม่ซ้ำ (QC-02)';
+  return 'คัดลอกค่าตรง';
+}
+
+function defaultControl(f, d) {
+  if (f === 'source_type_code') return `<select><option>field_survey — สำรวจภาคสนาม</option>
+    <option>aerial — ดิจิไทซ์จากภาพถ่ายทางอากาศ</option><option selected>agency_doc — เอกสาร/ทะเบียนหน่วยงาน</option>
+    <option>citizen_report — แจ้งเหตุจากประชาชน</option><option>legacy — ชั้นข้อมูลเดิม</option></select>`;
+  if (f === 'confirm_status_code') return `<select><option>confirmed — ยืนยันแล้ว</option>
+    <option selected>pending — รอยืนยัน</option><option>conflict — ข้อมูลขัดแย้ง</option></select>`;
+  if (f === 'source_ref') return `<input type="text" value="ไฟล์นำเข้า ${d.file} (${new Date().toISOString().slice(0, 10)})">
+    <div class="hint">ค่าตั้งต้นอ้างอิงถึงไฟล์ที่นำเข้า ทำให้ตรวจสอบย้อนกลับได้ว่าข้อมูลมาจากไหน</div>`;
+  if (f === 'surveyed_on') return `<input type="date" value="2026-10-29">`;
+  return `<input type="text" placeholder="กำหนดค่าตั้งต้น">`;
+}
+
+function domainRows(d) {
+  const sets = {
+    L01: [['main', 42, 'main — ถนนสายหลัก', true], ['secondary', 61, 'secondary — ถนนสายรอง', true],
+          ['soi', 34, 'soi — ซอย', true], ['LATERITE', 18, '— เลือกค่า —', false]],
+    L03: [['fixed', 21, 'fixed — กล้องมุมคงที่', true], ['ptz', 9, 'ptz — กล้องหมุนส่าย', true],
+          ['dome', 8, 'dome — กล้องโดม', true]],
+    L07: [['park', 2, 'park — สวนสาธารณะ', true], ['ลานกีฬา', 3, '— เลือกค่า —', false],
+          ['green_area', 3, 'green_area — พื้นที่สีเขียว', true]]
+  };
+  return (sets[d.target] || sets.L01).map(r => `<tr>
+    <td class="mono small">${r[0]}</td><td class="num">${r[1]}</td>
+    <td>${r[3]
+      ? `<span class="badge badge-good">${icon('check')} ${r[2]}</span>`
+      : `<select style="min-height:28px"><option>— เลือกค่า —</option><option>laterite — ลูกรัง</option>
+         <option>sport_field — ลานกีฬา</option><option>— ข้ามรายการเหล่านี้ —</option></select>`}</td>
+  </tr>`).join('');
+}
+
+/* ---------- ขั้นตอนที่ 4 ---------- */
+function panel4() {
+  const d = cur;
+  const SEVC = { critical: ['วิกฤต', 'badge-critical'], serious: ['สำคัญ', 'badge-serious'], warning: ['เตือน', 'badge-warning'] };
+  const issues = d.issues.filter(i => i.n > 0);
+  const bad = issues.filter(i => i.sev === 'critical').reduce((s, i) => s + i.n, 0);
+  const ok = d.count - bad;
+  return `
+  <div class="grid g4 mb16">
+    <div class="stat"><div class="lbl">อ่านจากไฟล์ได้</div><div class="val num">${fmt(d.count)}</div>
+      <div class="foot">รายการ</div></div>
+    <div class="stat"><div class="lbl">พร้อมนำเข้า</div><div class="val num" style="color:var(--good-ink)">${fmt(ok)}</div>
+      <div class="foot">ผ่านกฎการตรวจทุกข้อ หรือแก้ไขอัตโนมัติได้</div></div>
+    <div class="stat"><div class="lbl">ไม่ผ่านเกณฑ์</div><div class="val num" style="color:${bad ? 'var(--critical)' : 'inherit'}">${fmt(bad)}</div>
+      <div class="foot">ข้ามรายการและสรุปไว้ในรายงาน</div></div>
+    <div class="stat"><div class="lbl">ต้องตรวจสอบภายหลัง</div><div class="val num">${fmt(issues.filter(i => i.sev === 'warning').reduce((s, i) => s + i.n, 0))}</div>
+      <div class="foot">นำเข้าได้แต่ทำเครื่องหมายไว้</div></div>
+  </div>
+
+  <div class="grid g-2-1">
+    <div class="card">
+      <div class="card-head"><h2>ผลการตรวจคุณภาพก่อนนำเข้า</h2><span class="spacer"></span>
+        <span class="hint">ใช้กฎชุดเดียวกับหน้าตรวจคุณภาพข้อมูล</span></div>
+      <div class="table-wrap">
+        <table class="tbl compact">
+          <thead><tr><th style="width:80px">ระดับ</th><th class="num" style="width:70px">จำนวน</th>
+            <th>สิ่งที่ตรวจพบ</th><th style="width:230px">การจัดการ</th></tr></thead>
+          <tbody>${issues.length ? issues.map(i => `<tr>
+            <td><span class="badge ${SEVC[i.sev][1]}">${SEVC[i.sev][0]}</span></td>
+            <td class="num">${i.n}</td><td class="small">${i.msg}</td>
+            <td class="small muted">${i.act}</td></tr>`).join('')
+            : `<tr><td colspan="4" class="center" style="padding:22px;color:var(--good-ink)">
+               ${icon('check')} ไม่พบข้อบกพร่อง</td></tr>`}</tbody>
+        </table>
+      </div>
+      <div class="card-foot">
+        <button class="btn btn-sm" onclick="toast('ดาวน์โหลดรายการที่ไม่ผ่านเกณฑ์เป็น CSV พร้อมเหตุผลรายบรรทัด','download')">
+          ${icon('download')} ดาวน์โหลดรายการที่ไม่ผ่าน</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h2>ตัวเลือกการนำเข้า</h2></div>
+      <div class="card-body">
+        <div class="field">
+          <label>เมื่อพบรหัสรายการซ้ำกับข้อมูลเดิม</label>
+          <select id="dupMode">
+            <option value="skip">ข้ามรายการที่ซ้ำ (แนะนำ)</option>
+            <option value="update">ปรับปรุงรายการเดิมเป็นเวอร์ชันใหม่</option>
+            <option value="new">สร้างรหัสใหม่ให้รายการที่ซ้ำ</option>
+          </select>
+          <div class="hint">หากเลือก "ปรับปรุงรายการเดิม" ระบบจะเก็บค่าก่อนแก้ไขไว้ใน
+            <code>audit.change_log</code> ครบทุกฟิลด์</div>
+        </div>
+        <div class="field">
+          <label>สถานะของรายการที่นำเข้า</label>
+          <select id="stMode">
+            <option value="draft">ร่าง — ให้ผู้นำเข้าตรวจทานก่อนส่งอนุมัติ (แนะนำ)</option>
+            <option value="submitted">ส่งเข้าคิวตรวจสอบทันที</option>
+          </select>
+          <div class="hint">ข้อมูลนำเข้าจะไม่เข้าสู่ชุดข้อมูลหลักและชุดเผยแพร่จนกว่าจะผ่านการอนุมัติ</div>
+        </div>
+        <label class="check"><input type="checkbox" checked><span>แก้ไขรูปทรงที่ไม่ถูกต้องอัตโนมัติด้วย ST_MakeValid</span></label>
+        <label class="check"><input type="checkbox" checked><span>แปลงรูปทรงให้ตรงชนิดของชั้นข้อมูลปลายทาง (ST_Multi / ST_Dump)</span></label>
+        <label class="check"><input type="checkbox" checked><span>เก็บไฟล์ต้นฉบับไว้ 90 วันเพื่อการตรวจสอบย้อนหลัง</span></label>
+        <label class="check"><input type="checkbox"><span>ยกเลิกทั้งชุดหากมีรายการไม่ผ่านเกณฑ์แม้แต่รายการเดียว</span></label>
+
+        <div class="notice notice-warn mt16" style="margin-bottom:0">${icon('warn')}<div>
+          การนำเข้าทำงานภายใน transaction เดียว หากเกิดข้อผิดพลาดระหว่างทาง
+          ระบบจะย้อนกลับทั้งหมดและไม่ทิ้งข้อมูลค้างไว้ในชั้นข้อมูล</div></div>
+      </div>
+      <div class="card-foot">
+        <button class="btn btn-primary btn-block" data-need="write" id="btnCommit">
+          ${icon('save')} นำเข้า ${fmt(ok)} รายการเข้าสู่ ${d.target}</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+/* ---------- ควบคุมขั้นตอน ---------- */
+function nav() {
+  if (step === 1) return '';
+  return `<div class="row mt16" style="justify-content:space-between">
+    <button class="btn" id="btnBack">← ย้อนกลับ</button>
+    ${step < 4 ? `<button class="btn btn-primary" id="btnNext" data-need="write">ขั้นตอนถัดไป →</button>` : ''}
+  </div>`;
+}
+
+function render() {
+  paintSteps();
+  const p = document.getElementById('panel');
+  p.innerHTML = (step === 1 ? panel1() : step === 2 ? panel2() : step === 3 ? panel3() : panel4()) + nav();
+  document.getElementById('histCard').style.display = step === 1 ? '' : 'none';
+
+  if (step === 1) {
+    document.querySelectorAll('[data-demo]').forEach(b => b.onclick = () => {
+      if (currentRole() === 'viewer') return toast('สิทธิ์ผู้อ่านข้อมูลนำเข้าข้อมูลไม่ได้', 'warn');
+      cur = DEMOS[b.dataset.demo]; step = 2; render();
+      toast(`อ่านไฟล์ ${cur.file} สำเร็จ — พบ ${fmt(cur.count)} รายการ`, 'check');
+    });
+    const pick = document.getElementById('btnPick');
+    if (pick) pick.onclick = () => toast('ต้นแบบหน้าจอ — ระบบจริงจะเปิดหน้าต่างเลือกไฟล์จากเครื่อง', 'info');
+    const dz = document.getElementById('drop');
+    ['dragenter', 'dragover'].forEach(e => dz.addEventListener(e, ev => { ev.preventDefault(); dz.classList.add('hover'); }));
+    ['dragleave', 'drop'].forEach(e => dz.addEventListener(e, ev => { ev.preventDefault(); dz.classList.remove('hover'); }));
+    dz.addEventListener('drop', () => toast('ต้นแบบหน้าจอ — เลือกไฟล์ตัวอย่างด้านล่างเพื่อดูขั้นตอนทั้งหมด', 'info'));
+  }
+
+  if (step === 2) {
+    paintCompat();
+    document.getElementById('tgtLayer').addEventListener('change', paintCompat);
+    setTimeout(initPreview, 60);
+  }
+
+  if (step === 4) {
+    const bc = document.getElementById('btnCommit');
+    if (bc) bc.onclick = doImport;
+  }
+
+  const bb = document.getElementById('btnBack');
+  if (bb) bb.onclick = () => { step--; if (step < 1) step = 1; pmap = null; render(); };
+  const bn = document.getElementById('btnNext');
+  if (bn) bn.onclick = () => {
+    if (step === 2) {
+      const t = document.getElementById('tgtLayer').value;
+      if (!compat(cur.geomType, TARGET_GEOM[t]).ok)
+        return toast('ชนิดรูปทรงไม่ตรงกับชั้นข้อมูลปลายทาง — เลือกชั้นข้อมูลใหม่ก่อน', 'warn');
+      cur = Object.assign({}, cur, { target: t });
+    }
+    step++; pmap = null; render();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+}
+
+function paintCompat() {
+  const t = document.getElementById('tgtLayer').value;
+  const c = compat(cur.geomType, TARGET_GEOM[t]);
+  document.getElementById('compatBox').innerHTML = `
+    <div class="notice ${c.ok ? 'notice-good' : 'notice-crit'}" style="margin-bottom:0">
+      ${icon(c.ok ? 'check' : 'warn')}<div>
+      <strong>${c.ok ? 'รูปทรงเข้ากันได้' : 'รูปทรงไม่เข้ากัน'}</strong>
+      ต้นทาง <code>${cur.geomType}</code> → ปลายทาง <code>${TARGET_GEOM[t]}</code> — ${c.msg}</div></div>`;
+  const bn = document.getElementById('btnNext');
+  if (bn) bn.disabled = !c.ok;
+}
+
+function initPreview() {
+  const el = document.getElementById('pmap');
+  if (!el || pmap) return;
+  pmap = L.map(el, { zoomControl: true, attributionControl: false });
+  L.tileLayer('https://services.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}',
+    { maxZoom: 16 }).addTo(pmap);
+  const cv = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+  L.geoJSON(STUDY_AREA, { style: { color: cv('--s8'), weight: 2, dashArray: '6 4', fill: false } }).addTo(pmap);
+  pLayer = L.geoJSON({ type: 'FeatureCollection', features: cur.features }, {
+    style: { color: cv('--s2'), weight: 2.5, fillColor: cv('--s2'), fillOpacity: .3 },
+    pointToLayer: (f, ll) => L.circleMarker(ll, { radius: 5, color: cv('--surface-1'), weight: 1.5, fillColor: cv('--s2'), fillOpacity: 1 }),
+    onEachFeature: (f, l) => l.bindPopup(`<b>${f.properties.code}</b><br>${f.properties.name || ''}`)
+  }).addTo(pmap);
+  try { pmap.fitBounds(pLayer.getBounds(), { padding: [18, 18] }); } catch (e) { pmap.setView(CENTER, 12); }
+  setTimeout(() => pmap.invalidateSize(), 120);
+}
+
+function doImport() {
+  if (currentRole() === 'viewer') return toast('สิทธิ์ผู้อ่านข้อมูลนำเข้าข้อมูลไม่ได้', 'warn');
+  const d = cur;
+  const bad = d.issues.filter(i => i.sev === 'critical').reduce((s, i) => s + i.n, 0);
+  const ok = d.count - bad;
+  const m = modal('กำลังนำเข้าข้อมูล',
+    `<div class="progress" style="height:9px"><i id="ib" style="width:5%"></i></div>
+     <p class="small dim mt16" id="it">กำลังเตรียมข้อมูล…</p>`, '');
+  const steps = ['อ่านไฟล์และแตกข้อมูลลงตารางพัก…', 'แปลงระบบพิกัดเป็น EPSG:4326…',
+    'แปลงชนิดรูปทรงให้ตรงชั้นข้อมูลปลายทาง…', 'จับคู่ค่ารหัสกับตารางอ้างอิง…',
+    'ตรวจคุณภาพข้อมูลตามกฎที่กำหนด…', 'บันทึกเข้าชั้นข้อมูลภายใน transaction เดียว…',
+    'บันทึกประวัติการนำเข้าและไฟล์ต้นฉบับ…'];
+  let i = 0;
+  const t = setInterval(() => {
+    i++;
+    const ib = m.el.querySelector('#ib'), it = m.el.querySelector('#it');
+    if (!ib) return clearInterval(t);
+    ib.style.width = Math.min(100, i / steps.length * 100) + '%';
+    it.textContent = steps[Math.min(i, steps.length - 1)];
+    if (i >= steps.length) {
+      clearInterval(t); m.close();
+      HIST.unshift({ id: 'IMP-00' + (120 + HIST.length), file: d.file, fmt: d.fmt, layer: d.target,
+        read: d.count, done: ok, fail: bad, user: 'ปิยะนุช ส.', when: 'เมื่อสักครู่', state: 'done' });
+      step = 1; cur = null; pmap = null; render(); paintHist();
+      toast(`นำเข้าสำเร็จ ${fmt(ok)} รายการ${bad ? ` · ข้าม ${bad} รายการที่ไม่ผ่านเกณฑ์` : ''}`, 'check');
+    }
+  }, 430);
+}
+
+/* ---------- ประวัติการนำเข้า ---------- */
+const HIST = [
+  { id: 'IMP-00119', file: 'water_pipe_network.geojson', fmt: 'GeoJSON', layer: 'L05', read: 418, done: 412, fail: 6,
+    user: 'อรทัย พ.', when: '28 ต.ค. 2569 10:42', state: 'done' },
+  { id: 'IMP-00118', file: 'drainage_line.zip', fmt: 'Shapefile', layer: 'L06', read: 926, done: 926, fail: 0,
+    user: 'ณัฐวุฒิ ร.', when: '27 ต.ค. 2569 14:08', state: 'done' },
+  { id: 'IMP-00117', file: 'street_light_survey.kml', fmt: 'KML', layer: 'L02', read: 184, done: 181, fail: 3,
+    user: 'ธนากร ค.', when: '26 ต.ค. 2569 09:15', state: 'done' },
+  { id: 'IMP-00116', file: 'parcel_boundary_2568.zip', fmt: 'Shapefile', layer: 'L09', read: 0, done: 0, fail: 0,
+    user: 'สมชาย ว.', when: '25 ต.ค. 2569 16:30', state: 'failed' },
+  { id: 'IMP-00115', file: 'bridge_points.geojson', fmt: 'GeoJSON', layer: 'L04', read: 47, done: 47, fail: 0,
+    user: 'ธนากร ค.', when: '24 ต.ค. 2569 11:02', state: 'done' }
+];
+function paintHist() {
+  document.getElementById('hist').innerHTML = HIST.map(h => `<tr>
+    <td class="mono small">${h.id}</td>
+    <td class="mono small" style="word-break:break-all">${h.file}</td>
+    <td class="small">${h.fmt}</td>
+    <td class="small">${h.layer} ${(LAYERS.find(l => l.code === h.layer) || {}).name || ''}</td>
+    <td class="num">${fmt(h.read)}</td>
+    <td class="num">${h.done ? fmt(h.done) : '—'}</td>
+    <td class="num">${h.fail ? `<b style="color:var(--critical)">${h.fail}</b>` : '—'}</td>
+    <td class="small">${h.user}</td>
+    <td class="small nowrap">${h.when}</td>
+    <td>${h.state === 'done'
+      ? '<span class="badge badge-good">สำเร็จ</span>'
+      : '<span class="badge badge-critical" title="ไฟล์ ZIP ไม่มี .prj และไม่ได้ระบุระบบพิกัด">ไม่สำเร็จ</span>'}</td>
+  </tr>`).join('');
+}
+
+document.getElementById('btnHist').onclick = () => {
+  step = 1; render(); paintHist();
+  document.getElementById('histCard').scrollIntoView({ behavior: 'smooth' });
+};
+document.addEventListener('rolechange', () => { step = 1; cur = null; pmap = null; render(); });
+
+render();
+paintHist();
+</script>
+</body>
+</html>
