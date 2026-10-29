@@ -1,0 +1,792 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ข้อกำหนด API — GeoCore GIS</title>
+<link rel="icon" href="assets/img/favicon.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/app.css">
+<style>
+  .ep { border: 1px solid var(--line); border-radius: var(--r-lg); background: var(--surface-1);
+        margin-bottom: 16px; box-shadow: var(--shadow-sm); overflow: hidden; scroll-margin-top: 70px; }
+  .ep > header { display: flex; align-items: center; gap: 10px; padding: 13px 16px;
+                 border-bottom: 1px solid var(--line); background: var(--surface-2); flex-wrap: wrap; }
+  .ep .body { padding: 16px; }
+  .ep h4 { font-size: .8rem; text-transform: uppercase; letter-spacing: .05em; color: var(--ink-3);
+           margin: 18px 0 8px; font-weight: 650; }
+  .ep h4:first-child { margin-top: 0; }
+  .two { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px,1fr)); gap: 14px; }
+  .jump2 a { display: block; padding: 5px 9px; border-radius: var(--r-sm); font-size: .78rem; color: var(--ink-2); }
+  .jump2 a:hover { background: var(--surface-2); color: var(--ink-1); text-decoration: none; }
+  .jump2 { position: sticky; top: calc(var(--topbar-h) + 10px); align-self: start; }
+</style>
+</head>
+<body>
+<main class="content"><div class="content-inner" id="root"></div></main>
+
+<script src="assets/js/data.js"></script>
+<script src="assets/js/shell.js"></script>
+<script>
+renderShell('api-spec.html');
+const root = document.getElementById('root');
+const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+const fmtPath = p => p.replace(/\{(\w+)\}/g, '<span class="p">{$1}</span>');
+
+/* ---------- เนื้อหาข้อกำหนดรายละเอียด ---------- */
+const SPECS = [
+{
+  id: 'login', m: 'POST', p: '/auth/login', title: 'เข้าสู่ระบบ',
+  role: 'สาธารณะ (ไม่ต้องมีโทเค็น)',
+  desc: 'ยืนยันตัวตนด้วยชื่อผู้ใช้และรหัสผ่าน คืนค่า access token และ refresh token พร้อมรายการสิทธิ์และชั้นข้อมูลที่ผู้ใช้เข้าถึงได้ หากบัญชีเปิดการยืนยันสองขั้นตอน จะคืน 428 พร้อมรหัสขั้นตอนถัดไป',
+  req: `POST /api/v1/auth/login
+Content-Type: application/json
+
+{
+  "username": "piyanuch@example.go.th",
+  "password": "<PASSWORD>",
+  "device_id": "fld-tablet-07"
+}`,
+  res: `HTTP/1.1 200 OK
+Content-Type: application/json
+
+{
+  "access_token": "<JWT>",
+  "token_type": "Bearer",
+  "expires_in": 1800,
+  "refresh_token": "<REFRESH_TOKEN>",
+  "user": {
+    "user_uid": "6f1b2d84-9c0a-4f31-b7de-5a2c91e4d007",
+    "user_code": "U-014",
+    "display_name": "ปิยะนุช ส.",
+    "org_unit": "กองช่าง",
+    "roles": ["both"],
+    "permissions": [
+      "feature.read", "feature.create", "feature.update",
+      "feature.approve", "qc.run", "export.create", "publication.create"
+    ],
+    "layer_scope": [
+      { "layer_code": "L01", "can_write": true },
+      { "layer_code": "L02", "can_write": true },
+      { "layer_code": "L03", "can_write": false },
+      { "layer_code": "L08", "can_write": true }
+    ]
+  }
+}`,
+  notes: ['รหัสผ่านตรวจด้วย argon2id และไม่ปรากฏในบันทึกการใช้งานทุกกรณี',
+          'ล็อกบัญชี 15 นาทีหลังใส่รหัสผิด 5 ครั้งติดต่อกัน',
+          'การเข้าสู่ระบบทุกครั้งบันทึกลง audit.access_log พร้อมที่อยู่ IP']
+},
+{
+  id: 'list', m: 'GET', p: '/layers/{layerCode}/features', title: 'ค้นรายการข้อมูลในชั้นข้อมูล',
+  role: 'ผู้อ่านข้อมูล · ทั้งสองสิทธิ์ · ผู้ดูแลระบบ (ผู้ป้อนข้อมูลเห็นเฉพาะรายการของตน)',
+  desc: 'คืนค่าเป็น GeoJSON FeatureCollection รองรับการกรองด้วยกรอบพื้นที่ (bbox) และเงื่อนไข CQL2 การเรียงลำดับ การเลือกฟิลด์ และการแบ่งหน้าแบบ keyset',
+  params: [
+    ['layerCode', 'path', 'string', 'รหัสชั้นข้อมูล เช่น L01', 'บังคับ'],
+    ['bbox', 'query', 'number[4]', 'กรอบพื้นที่ minLon,minLat,maxLon,maxLat (EPSG:4326)', '—'],
+    ['filter', 'query', 'string', 'เงื่อนไขตามไวยากรณ์ CQL2-Text', '—'],
+    ['sortby', 'query', 'string', 'ฟิลด์ที่ใช้เรียง นำหน้าด้วย - เพื่อเรียงจากมากไปน้อย', '-updated_at'],
+    ['fields', 'query', 'string', 'รายชื่อฟิลด์ที่ต้องการ คั่นด้วยจุลภาค', 'ทุกฟิลด์'],
+    ['limit', 'query', 'integer', 'จำนวนรายการต่อหน้า (1–500)', '50'],
+    ['cursor', 'query', 'string', 'ตัวชี้หน้าถัดไปจากผลลัพธ์ก่อนหน้า', '—'],
+    ['geometry', 'query', 'string', 'full | simplified | none (ลดขนาดคำตอบเมื่อไม่ต้องการรูปทรง)', 'full']
+  ],
+  req: `GET /api/v1/layers/L01/features
+      ?bbox=101.2184,12.8014,101.3127,12.8906
+      &filter=owner_agency_id=1 AND confirm_status_code='pending'
+      &sortby=-updated_at&limit=2
+Authorization: Bearer <ACCESS_TOKEN>`,
+  res: `HTTP/1.1 200 OK
+Content-Type: application/geo+json
+X-Request-Id: 3f7a90c2-1b84-4e55-9c01-77ad1e0b9c42
+RateLimit-Remaining: 593
+
+{
+  "type": "FeatureCollection",
+  "numberMatched": 147,
+  "numberReturned": 2,
+  "next_cursor": "eyJ1cGRhdGVkX2F0IjoiMjAyNi0xMC0xMSJ9",
+  "features": [
+    {
+      "type": "Feature",
+      "id": "b41c7e90-2a55-4d18-9f03-6c71e2a4d881",
+      "geometry": {
+        "type": "MultiLineString",
+        "coordinates": [[[101.2238, 12.8412], [101.2244, 12.8415]]]
+      },
+      "properties": {
+        "feature_code": "RD-0171",
+        "layer_code": "L01",
+        "name_th": "ถนนเชื่อมเขตตำบลข้างเคียง",
+        "road_class_code": "secondary",
+        "surface_code": "asphalt",
+        "condition_code": "fair",
+        "length_m": 1960.00,
+        "width_m": 5.50,
+        "owner_agency_id": 1,
+        "maintainer_agency_id": 3,
+        "confirm_status_code": "pending",
+        "source_type_code": "field_survey",
+        "source_ref": "หนังสือ อบจ. ที่ 51003/1842",
+        "surveyed_on": "2026-10-11",
+        "positional_accuracy_m": 1.20,
+        "record_status_code": "submitted",
+        "sensitivity_code": "internal",
+        "is_public": false,
+        "version_no": 2,
+        "updated_at": "2026-10-11T14:08:22+07:00"
+      }
+    }
+  ],
+  "links": [
+    { "rel": "self", "href": "/api/v1/layers/L01/features?..." },
+    { "rel": "next", "href": "/api/v1/layers/L01/features?cursor=eyJ1cGRh..." }
+  ]
+}`,
+  notes: ['ฟิลด์ที่ผู้ใช้ไม่มีสิทธิ์เห็นจะถูกตัดออกจากคำตอบ ไม่ใช่คืนค่าว่าง เพื่อไม่ให้เดาได้ว่ามีข้อมูลอยู่',
+          'เมื่อขอ geometry=none ระบบคืนเฉพาะคุณลักษณะ ใช้กับหน้าตารางข้อมูลเพื่อลดขนาดคำตอบราว 85%',
+          'การกรองทั้งหมดประมวลผลในฐานข้อมูลด้วยดัชนี GiST และ B-tree']
+},
+{
+  id: 'create', m: 'POST', p: '/layers/{layerCode}/features', title: 'สร้างรายการข้อมูลใหม่',
+  role: 'ผู้ป้อนข้อมูล · ทั้งสองสิทธิ์ · ผู้ดูแลระบบ',
+  desc: 'สร้างรายการใหม่ในสถานะ draft ระบบสร้าง feature_code ให้อัตโนมัติหากไม่ส่งมา และตรวจค่าด้วยกฎชุดเดียวกับการตรวจคุณภาพก่อนบันทึก',
+  req: `POST /api/v1/layers/L02/features
+Authorization: Bearer <ACCESS_TOKEN>
+Content-Type: application/geo+json
+Idempotency-Key: 9c2f0a41-5d77-4a10-8b6e-0f2a7c9d3311
+
+{
+  "type": "Feature",
+  "geometry": { "type": "Point", "coordinates": [101.24631, 12.85214] },
+  "properties": {
+    "name_th": "จุดไฟส่องสว่างหน้าศาลาประชาคม",
+    "light_type_code": "led",
+    "wattage": 100,
+    "pole_type_code": "concrete",
+    "status_code": "active",
+    "road_uid": "b41c7e90-2a55-4d18-9f03-6c71e2a4d881",
+    "owner_agency_id": 3,
+    "maintainer_agency_id": 3,
+    "confirm_status_code": "confirmed",
+    "source_type_code": "field_survey",
+    "source_ref": "ทะเบียนทรัพย์สิน กช.112/2569",
+    "surveyed_on": "2026-10-29",
+    "positional_accuracy_m": 1.10,
+    "sensitivity_code": "internal"
+  }
+}`,
+  res: `HTTP/1.1 201 Created
+Location: /api/v1/layers/L02/features/7d3e5a21-88bf-4c09-a7e1-13c4b602f99a
+ETag: "1"
+
+{
+  "type": "Feature",
+  "id": "7d3e5a21-88bf-4c09-a7e1-13c4b602f99a",
+  "properties": {
+    "feature_code": "SL-00743",
+    "record_status_code": "draft",
+    "version_no": 1,
+    "created_at": "2026-10-29T08:40:03+07:00",
+    "created_by": "a71c0e55-...",
+    "validation": {
+      "passed": true,
+      "warnings": [
+        { "rule": "QC-07",
+          "message": "ระยะห่างจากแนวถนน RD-0101 เท่ากับ 18.4 ม. (เกณฑ์ 25 ม.)",
+          "severity": "warning" }
+      ]
+    }
+  }
+}`,
+  notes: ['ส่งคำขอซ้ำด้วย Idempotency-Key เดิมจะคืนรายการเดิม ไม่สร้างซ้ำ — จำเป็นสำหรับการซิงก์จากภาคสนาม',
+          'หากฟิลด์บังคับไม่ครบ ระบบคืน 422 พร้อมรายการฟิลด์ที่ผิดและกฎที่ไม่ผ่าน',
+          'รายการที่สร้างใหม่ยังไม่เข้าสู่ชุดข้อมูลหลักจนกว่าจะผ่านการอนุมัติ']
+},
+{
+  id: 'patch', m: 'PATCH', p: '/layers/{layerCode}/features/{featureId}', title: 'แก้ไขรายการ',
+  role: 'ผู้ป้อนข้อมูล (เฉพาะรายการร่างของตน) · ทั้งสองสิทธิ์ · ผู้ดูแลระบบ',
+  desc: 'แก้ไขเฉพาะฟิลด์ที่ส่งมา ต้องแนบ If-Match เป็นเลขเวอร์ชันปัจจุบันเพื่อป้องกันการเขียนทับงานของผู้อื่น',
+  req: `PATCH /api/v1/layers/L02/features/7d3e5a21-88bf-4c09-a7e1-13c4b602f99a
+Authorization: Bearer <ACCESS_TOKEN>
+If-Match: "2"
+Content-Type: application/json
+
+{
+  "status_code": "damaged",
+  "description": "โคมไฟดับ พบรอยแตกที่ฝาครอบ"
+}`,
+  res: `HTTP/1.1 200 OK
+ETag: "3"
+
+{
+  "feature_uid": "7d3e5a21-88bf-4c09-a7e1-13c4b602f99a",
+  "feature_code": "SL-00413",
+  "version_no": 3,
+  "updated_at": "2026-10-29T08:52:10+07:00",
+  "updated_by": "a71c0e55-...",
+  "changed_fields": ["status_code", "description"]
+}`,
+  errors: [['409 Conflict', 'เลขเวอร์ชันใน If-Match ไม่ตรงกับเวอร์ชันปัจจุบัน — ผู้อื่นแก้ไขไปก่อนแล้ว คำตอบแนบค่าปัจจุบันมาให้เปรียบเทียบ'],
+           ['403 Forbidden', 'ผู้ป้อนข้อมูลพยายามแก้ไขรายการของผู้อื่น หรือรายการไม่ได้อยู่ในสถานะร่าง'],
+           ['428 Precondition Required', 'ไม่ได้ส่งส่วนหัว If-Match']],
+  notes: ['ทุกการแก้ไขสร้างเวอร์ชันใหม่และบันทึกค่าก่อน/หลังลง audit.change_log โดย trigger ของฐานข้อมูล',
+          'แก้ไขรูปทรงเชิงพื้นที่ใช้ endpoint แยก (PUT .../geometry) เพื่อให้ตรวจความถูกต้องของรูปทรงได้ชัดเจน']
+},
+{
+  id: 'sync', m: 'POST', p: '/survey/sync', title: 'ซิงก์ข้อมูลที่บันทึกออฟไลน์',
+  role: 'ผู้ป้อนข้อมูล · ทั้งสองสิทธิ์ · ผู้ดูแลระบบ',
+  desc: 'ส่งรายการที่บันทึกไว้ในอุปกรณ์ภาคสนามเป็นชุดเดียว ระบบประมวลผลทีละรายการและคืนผลรายรายการ โดยรายการที่ขัดแย้งจะไม่ทำให้ทั้งชุดล้มเหลว',
+  req: `POST /api/v1/survey/sync
+Authorization: Bearer <ACCESS_TOKEN>
+Content-Type: application/json
+
+{
+  "session_uid": "0a91c7e4-5b22-4f80-9d31-c84e07f2a615",
+  "device_id": "fld-tablet-07",
+  "items": [
+    { "client_id": "local-0041", "op": "create", "layer_code": "L02",
+      "feature": { "...": "GeoJSON Feature" } },
+    { "client_id": "local-0042", "op": "update", "layer_code": "L02",
+      "feature_uid": "7d3e...", "base_version": 2,
+      "properties": { "status_code": "damaged" } },
+    { "client_id": "local-0043", "op": "create", "layer_code": "L02",
+      "feature": { "...": "GeoJSON Feature" } }
+  ]
+}`,
+  res: `HTTP/1.1 207 Multi-Status
+
+{
+  "session_uid": "0a91c7e4-5b22-4f80-9d31-c84e07f2a615",
+  "accepted": 2,
+  "conflicted": 1,
+  "results": [
+    { "client_id": "local-0041", "status": 201,
+      "feature_uid": "9b2c...", "feature_code": "SL-00744" },
+    { "client_id": "local-0042", "status": 200, "version_no": 3 },
+    { "client_id": "local-0043", "status": 409,
+      "reason": "duplicate_location",
+      "message": "พิกัดซ้ำกับ SL-00412 ในระยะ 0.6 ม. (กฎ QC-05)",
+      "conflict_with": { "feature_code": "SL-00412",
+                         "distance_m": 0.6 },
+      "resolution_options": ["merge", "keep_both", "discard"] }
+  ]
+}`,
+  notes: ['ใช้คีย์ client_id จากอุปกรณ์เพื่อให้ส่งซ้ำได้โดยไม่เกิดรายการซ้ำ',
+          'ภาพถ่ายอัปโหลดแยกหลังจากซิงก์สำเร็จ โดยอ้างอิง feature_uid ที่ได้รับกลับมา',
+          'รายการที่ขัดแย้งยังอยู่ในเครื่องจนกว่าผู้สำรวจจะเลือกวิธีแก้ไข']
+},
+{
+  id: 'nearby', m: 'GET', p: '/spatial/nearby', title: 'ค้นรายการใกล้พิกัดที่กำหนด',
+  role: 'ผู้อ่านข้อมูล · ทั้งสองสิทธิ์ · ผู้ดูแลระบบ',
+  desc: 'ค้นหารายการในหลายชั้นข้อมูลที่อยู่ในรัศมีที่กำหนดจากพิกัดหนึ่ง ประมวลผลด้วย ST_DWithin บนชนิด geography',
+  params: [
+    ['lon', 'query', 'number', 'ลองจิจูด (EPSG:4326)', 'บังคับ'],
+    ['lat', 'query', 'number', 'ละติจูด (EPSG:4326)', 'บังคับ'],
+    ['radius_m', 'query', 'number', 'รัศมีค้นหาเป็นเมตร (1–5000)', '200'],
+    ['layers', 'query', 'string', 'รหัสชั้นข้อมูลที่ต้องการ คั่นด้วยจุลภาค', 'ทุกชั้นที่มีสิทธิ์'],
+    ['limit', 'query', 'integer', 'จำนวนรายการสูงสุดต่อชั้นข้อมูล', '20']
+  ],
+  req: `GET /api/v1/spatial/nearby
+      ?lon=101.24631&lat=12.85214&radius_m=150&layers=L01,L02,L04
+Authorization: Bearer <ACCESS_TOKEN>`,
+  res: `HTTP/1.1 200 OK
+
+{
+  "origin": { "lon": 101.24631, "lat": 12.85214 },
+  "radius_m": 150,
+  "results": [
+    { "layer_code": "L01", "feature_code": "RD-0101",
+      "name_th": "ถนนสายหลักกลางตำบล", "distance_m": 4.2 },
+    { "layer_code": "L02", "feature_code": "SL-00412",
+      "name_th": "จุดไฟส่องสว่าง", "distance_m": 18.7,
+      "properties": { "status_code": "active" } },
+    { "layer_code": "L04", "feature_code": "BR-0012",
+      "name_th": "สะพานข้ามคลอง 2", "distance_m": 112.5,
+      "properties": { "condition_code": "fair" } }
+  ],
+  "count_by_layer": { "L01": 1, "L02": 6, "L04": 1 }
+}`,
+  notes: ['ใช้เป็นฐานของฟังก์ชัน "ทรัพย์สินใกล้จุดที่แจ้งเหตุ" ในการรับเรื่องร้องเรียน',
+          'ระยะคำนวณบนทรงรี (geography) จึงถูกต้องโดยไม่ต้องแปลงพิกัดเอง']
+},
+{
+  id: 'qcrun', m: 'POST', p: '/qc/runs', title: 'เรียกการตรวจคุณภาพข้อมูล',
+  role: 'ทั้งสองสิทธิ์ · ผู้ดูแลระบบ',
+  desc: 'เริ่มรอบการตรวจคุณภาพแบบไม่รอผล (asynchronous) คืนรหัสรอบการตรวจเพื่อใช้ติดตามสถานะและดึงผล',
+  req: `POST /api/v1/qc/runs
+Authorization: Bearer <ACCESS_TOKEN>
+Content-Type: application/json
+
+{
+  "scope_layers": ["L01", "L02", "L03", "L04", "L05",
+                   "L06", "L07", "L08"],
+  "rules": "all_active",
+  "generate_report": true,
+  "auto_assign": true
+}`,
+  res: `HTTP/1.1 202 Accepted
+Location: /api/v1/qc/runs/185
+
+{
+  "run_id": 185,
+  "status": "running",
+  "started_at": "2026-10-29T10:14:00+07:00",
+  "estimated_seconds": 45,
+  "poll_url": "/api/v1/qc/runs/185"
+}`,
+  extra: {
+    title: 'ผลการตรวจเมื่อเสร็จสิ้น — GET /qc/runs/185',
+    code: `{
+  "run_id": 185,
+  "status": "done",
+  "finished_at": "2026-10-29T10:14:42+07:00",
+  "checked_count": 37137,
+  "finding_count": 8,
+  "by_severity": { "critical": 2, "serious": 3, "warning": 3 },
+  "by_layer": { "L01": 2, "L02": 2, "L05": 2, "L06": 2 },
+  "report_urls": {
+    "pdf":  "/api/v1/qc/runs/185/report?format=pdf",
+    "xlsx": "/api/v1/qc/runs/185/report?format=xlsx"
+  }
+}`
+  },
+  notes: ['ระบบตรวจตามรอบอัตโนมัติทุกวันเวลา 02:00 ด้วย endpoint เดียวกันนี้',
+          'ข้อค้นพบระดับวิกฤตจะปิดการสร้างชุดส่งมอบขั้นสุดท้ายจนกว่าจะแก้ไขหรือบันทึกการยกเว้น']
+},
+{
+  id: 'export', m: 'POST', p: '/exports', title: 'สร้างงานส่งออกชุดข้อมูล',
+  role: 'ตามกลุ่มสิทธิ์ (ผู้ป้อนข้อมูลส่งออกได้เฉพาะรายการของตน)',
+  desc: 'สร้างงานส่งออกแบบไม่รอผล รองรับหลายรูปแบบในชุดเดียว พร้อมบัญชีไฟล์และค่าแฮชเพื่อการตรวจรับ',
+  req: `POST /api/v1/exports
+Authorization: Bearer <ACCESS_TOKEN>
+Content-Type: application/json
+
+{
+  "formats": ["gpkg", "qgs", "pdf_map", "xlsx", "csv", "photos"],
+  "scope": {
+    "layers": "all",
+    "record_status": ["approved"],
+    "srid": 4326
+  },
+  "options": {
+    "relative_paths": true,
+    "include_data_dictionary": true,
+    "include_metadata": true,
+    "include_styles": true,
+    "include_manifest": true,
+    "csv_encoding": "utf8-bom",
+    "fail_on_critical_findings": false
+  }
+}`,
+  res: `HTTP/1.1 202 Accepted
+Location: /api/v1/exports/EXP-00913
+
+{
+  "export_uid": "EXP-00913",
+  "status": "queued",
+  "formats": ["gpkg", "qgs", "pdf_map", "xlsx", "csv", "photos"],
+  "estimated_size_mb": 4820,
+  "expires_at": "2026-10-30T10:20:00+07:00",
+  "poll_url": "/api/v1/exports/EXP-00913"
+}`,
+  extra: {
+    title: 'บัญชีไฟล์ — GET /exports/EXP-00913/manifest',
+    code: `{
+  "export_uid": "EXP-00913",
+  "dataset_version": "v2026.10",
+  "generated_at": "2026-10-29T10:28:41+07:00",
+  "files": [
+    { "path": "01_database/gis_dataset.gpkg",
+      "type": "GeoPackage", "bytes": 1299227443,
+      "record_count": 37137,
+      "sha256": "a7f3c901de42..." },
+    { "path": "02_qgis_project/project.qgz",
+      "type": "QGIS Project", "bytes": 2516582,
+      "sha256": "55c2ab7f1904..." },
+    { "path": "05_metadata/data_dictionary.xlsx",
+      "type": "Excel", "bytes": 348160,
+      "sha256": "cc4471e90b28..." }
+  ],
+  "total_files": 412,
+  "total_bytes": 5174304768
+}`
+  },
+  notes: ['ลิงก์ดาวน์โหลดหมดอายุใน 24 ชั่วโมง และการดาวน์โหลดทุกครั้งบันทึกลง audit.access_log',
+          'โครงการ QGIS ใช้พาธสัมพัทธ์เสมอ จึงคัดลอกทั้งโฟลเดอร์ไปเปิดบนเครื่องอื่นได้โดยไม่มีลิงก์สูญหาย']
+},
+{
+  id: 'tiles', m: 'GET', p: '/tiles/{layerCode}/{z}/{x}/{y}.pbf', title: 'Vector tile สำหรับแสดงผลแผนที่',
+  role: 'ผู้อ่านข้อมูล · ทั้งสองสิทธิ์ · ผู้ดูแลระบบ',
+  desc: 'คืนไทล์รูปแบบ Mapbox Vector Tile ที่สร้างจาก ST_AsMVT ในฐานข้อมูลโดยตรง ใช้แสดงชั้นข้อมูลขนาดใหญ่บนเว็บและมือถือ',
+  req: `GET /api/v1/tiles/L09/14/12987/7612.pbf
+Authorization: Bearer <ACCESS_TOKEN>
+If-None-Match: "L09-v2026.10-14-12987-7612"`,
+  res: `HTTP/1.1 200 OK
+Content-Type: application/vnd.mapbox-vector-tile
+Content-Encoding: gzip
+Cache-Control: private, max-age=600
+ETag: "L09-v2026.10-14-12987-7612"
+
+<binary vector tile — 38.2 KB>`,
+  notes: ['ไทล์ถูกกรองตามสิทธิ์ของผู้ใช้ก่อนสร้างเสมอ ชั้นข้อมูลที่ไม่มีสิทธิ์จะคืน 403 ไม่ใช่ไทล์ว่าง',
+          'ลดรายละเอียดรูปทรงด้วย ST_Simplify ตามระดับการซูม เพื่อให้ไทล์ที่ระดับซูมต่ำมีขนาดเล็ก',
+          'คืน 304 Not Modified เมื่อ ETag ตรงกัน ทำให้การเลื่อนแผนที่ซ้ำพื้นที่เดิมไม่ใช้แบนด์วิดท์']
+},
+{
+  id: 'publish', m: 'POST', p: '/publications', title: 'สร้างชุดเผยแพร่สาธารณะ',
+  role: 'ทั้งสองสิทธิ์ · ผู้ดูแลระบบ',
+  desc: 'สร้างชุดข้อมูลเผยแพร่ตามโปรไฟล์ที่กำหนด โดยตัดชั้นข้อมูลและฟิลด์อ่อนไหวออกด้วยกฎ ไม่ใช่การคัดไฟล์ด้วยมือ',
+  req: `POST /api/v1/publications
+Authorization: Bearer <ACCESS_TOKEN>
+Content-Type: application/json
+
+{
+  "profile_code": "public_open_data",
+  "version_label": "v2026.10",
+  "note": "ชุดเผยแพร่ประจำเดือนตุลาคม 2569"
+}`,
+  res: `HTTP/1.1 201 Created
+
+{
+  "publication_uid": "c81f0a44-7b32-4d91-8e05-2a6f71d0c933",
+  "version_label": "v2026.10",
+  "profile_code": "public_open_data",
+  "layer_count": 9,
+  "record_count": 36919,
+  "excluded": {
+    "layers": ["L03"],
+    "fields": {
+      "gis.road": ["ownership_note", "source_ref",
+                   "created_by", "updated_by"],
+      "gis.land_parcel": ["tax_account_ref"],
+      "gis.building": ["house_no_masked"],
+      "gis.bridge": ["inspection_note"]
+    },
+    "records_by_status": { "draft": 112, "submitted": 106 }
+  },
+  "created_at": "2026-10-28T11:12:47+07:00"
+}`,
+  notes: ['ชั้นข้อมูลที่มี publishable = false ในทะเบียนชั้นข้อมูลจะถูกตัดออกเสมอ แม้ผู้เรียกจะมีสิทธิ์สูงสุด',
+          'เปรียบเทียบความต่างกับรุ่นก่อนได้ที่ GET /publications/{pubId}/diff ก่อนเผยแพร่จริง']
+}
+];
+
+/* ---------- render ---------- */
+root.innerHTML = `
+${pageHead({
+  crumbs: ['<a href="index.html">หน้าแรก</a>', '<a href="api-list.html">รายการ API</a>', 'ข้อกำหนดรายละเอียด'],
+  title: 'ข้อกำหนด API (API Specification)',
+  badge: badge('OpenAPI 3.1', 'info'),
+  sub: 'รายละเอียดคำขอ คำตอบ รหัสสถานะ และตัวอย่าง JSON ของ endpoint หลัก พร้อมข้อกำหนดร่วมด้านความปลอดภัยและการจัดการข้อผิดพลาด',
+  actions: `<a class="btn" href="api/openapi.yaml" download>${icon('download')} ดาวน์โหลด openapi.yaml</a>
+            <a class="btn" href="api-list.html">${icon('plug')} รายการ API ทั้งหมด</a>`
+})}
+
+<div class="tabs" data-tabs>
+  <button data-tab="e" aria-selected="true">Endpoint หลัก</button>
+  <button data-tab="c" aria-selected="false">ข้อกำหนดร่วม</button>
+  <button data-tab="x" aria-selected="false">ข้อผิดพลาดและรหัสสถานะ</button>
+  <button data-tab="f" aria-selected="false">ไวยากรณ์การกรอง (CQL2)</button>
+  <button data-tab="s" aria-selected="false">ความปลอดภัย</button>
+</div>
+
+<div class="tabpanel" data-panel="e">
+  <div class="grid" style="grid-template-columns:190px minmax(0,1fr);gap:18px">
+    <nav class="jump2 card" aria-label="สารบัญ endpoint">
+      <div class="card-body" style="padding:10px">
+        <div class="nav-label" style="padding:0 9px 6px">Endpoint</div>
+        ${SPECS.map(s => `<a href="#${s.id}"><span class="m m-${s.m}" style="min-width:40px;font-size:.6rem;
+          display:inline-block;margin-right:5px">${s.m}</span>${s.title}</a>`).join('')}
+      </div>
+    </nav>
+    <div id="eps"></div>
+  </div>
+</div>
+
+<div class="tabpanel" data-panel="c" hidden>
+  <div class="grid g2">
+    <div class="card"><div class="card-head"><h2>ส่วนหัวของคำขอ</h2></div>
+      <div class="table-wrap"><table class="tbl compact">
+        <thead><tr><th>ส่วนหัว</th><th>ใช้เมื่อ</th><th>ตัวอย่าง</th></tr></thead>
+        <tbody>
+          <tr><td class="mono small">Authorization</td><td class="small">ทุกคำขอที่ต้องยืนยันตัวตน</td>
+            <td class="mono small">Bearer &lt;ACCESS_TOKEN&gt;</td></tr>
+          <tr><td class="mono small">Content-Type</td><td class="small">POST/PATCH/PUT</td>
+            <td class="mono small">application/json · application/geo+json</td></tr>
+          <tr><td class="mono small">Accept</td><td class="small">ระบุรูปแบบคำตอบที่ต้องการ</td>
+            <td class="mono small">application/geo+json</td></tr>
+          <tr><td class="mono small">If-Match</td><td class="small">บังคับกับ PATCH/PUT ทุกครั้ง</td>
+            <td class="mono small">"3"</td></tr>
+          <tr><td class="mono small">If-None-Match</td><td class="small">ขอไทล์หรือข้อมูลที่อาจไม่เปลี่ยน</td>
+            <td class="mono small">"L09-v2026.10-14-…"</td></tr>
+          <tr><td class="mono small">Idempotency-Key</td><td class="small">POST ที่อาจถูกส่งซ้ำ (ซิงก์ภาคสนาม)</td>
+            <td class="mono small">9c2f0a41-5d77-…</td></tr>
+          <tr><td class="mono small">Accept-Language</td><td class="small">ภาษาของข้อความแจ้งข้อผิดพลาด</td>
+            <td class="mono small">th, en;q=0.8</td></tr>
+        </tbody></table></div></div>
+
+    <div class="card"><div class="card-head"><h2>ส่วนหัวของคำตอบ</h2></div>
+      <div class="table-wrap"><table class="tbl compact">
+        <thead><tr><th>ส่วนหัว</th><th>ความหมาย</th></tr></thead>
+        <tbody>
+          <tr><td class="mono small">X-Request-Id</td><td class="small">รหัสคำขอ ใช้อ้างอิงเมื่อแจ้งปัญหา และตรงกับ Audit Log</td></tr>
+          <tr><td class="mono small">ETag</td><td class="small">เลขเวอร์ชันปัจจุบันของรายการ ใช้ส่งกลับใน If-Match</td></tr>
+          <tr><td class="mono small">Location</td><td class="small">เส้นทางของทรัพยากรที่เพิ่งสร้าง (201/202)</td></tr>
+          <tr><td class="mono small">RateLimit-Limit</td><td class="small">โควตาต่อหน้าต่างเวลา</td></tr>
+          <tr><td class="mono small">RateLimit-Remaining</td><td class="small">จำนวนครั้งที่เหลือ</td></tr>
+          <tr><td class="mono small">RateLimit-Reset</td><td class="small">วินาทีจนกว่าโควตาจะรีเซ็ต</td></tr>
+          <tr><td class="mono small">Retry-After</td><td class="small">แนบมากับ 429 และ 503</td></tr>
+          <tr><td class="mono small">Content-Crs</td><td class="small">ระบบพิกัดของรูปทรงในคำตอบ (ค่าตั้งต้น EPSG:4326)</td></tr>
+        </tbody></table></div></div>
+
+    <div class="card"><div class="card-head"><h2>การแบ่งหน้าแบบ keyset</h2></div>
+      <div class="card-body" style="padding-top:12px">
+<pre class="code dark"><span class="c"># หน้าแรก</span>
+GET /api/v1/layers/L01/features?limit=50&amp;sortby=-updated_at
+
+<span class="c"># คำตอบแนบ next_cursor มาให้</span>
+{ <span class="t">"numberMatched"</span>: <span class="n">1284</span>,
+  <span class="t">"numberReturned"</span>: <span class="n">50</span>,
+  <span class="t">"next_cursor"</span>: <span class="s">"eyJ1cGRhdGVkX2F0IjoiMjAyNi0xMC0xMSJ9"</span> }
+
+<span class="c"># หน้าถัดไป — ใช้ cursor ไม่ใช้ offset</span>
+GET /api/v1/layers/L01/features?limit=50&amp;cursor=eyJ1cGRh...</pre>
+        <p class="hint">การแบ่งหน้าแบบ cursor ทำให้หน้าท้าย ๆ ของตารางที่มีหลายหมื่นรายการยังเร็วเท่าหน้าแรก
+          และไม่ข้ามหรือซ้ำรายการเมื่อมีการเพิ่มข้อมูลระหว่างเปิดดู</p>
+      </div></div>
+
+    <div class="card"><div class="card-head"><h2>Webhook (การแจ้งเตือนไปยังระบบอื่น)</h2></div>
+      <div class="card-body" style="padding-top:12px">
+<pre class="code dark">POST https://&lt;subscriber-endpoint&gt;
+X-GeoCore-Event: feature.approved
+X-GeoCore-Signature: sha256=&lt;HMAC&gt;
+
+{
+  <span class="t">"event"</span>: <span class="s">"feature.approved"</span>,
+  <span class="t">"occurred_at"</span>: <span class="s">"2026-10-29T09:14:22+07:00"</span>,
+  <span class="t">"layer_code"</span>: <span class="s">"L01"</span>,
+  <span class="t">"feature_code"</span>: <span class="s">"RD-0171"</span>,
+  <span class="t">"version_no"</span>: <span class="n">3</span>
+}</pre>
+        <p class="hint">เหตุการณ์ที่รองรับ: <code>feature.created</code>, <code>feature.approved</code>,
+          <code>feature.rejected</code>, <code>qc.run.completed</code>, <code>publication.created</code>
+          — ลงนามด้วย HMAC-SHA256 และส่งซ้ำแบบถอยหลังเพิ่มระยะเมื่อปลายทางไม่ตอบ</p>
+      </div></div>
+  </div>
+</div>
+
+<div class="tabpanel" data-panel="x" hidden>
+  <div class="grid g-2-1">
+    <div class="card">
+      <div class="card-head"><h2>รหัสสถานะที่ใช้</h2></div>
+      <div class="table-wrap"><table class="tbl">
+        <thead><tr><th style="width:110px">รหัส</th><th>ความหมาย</th><th>เกิดขึ้นเมื่อ</th></tr></thead>
+        <tbody>
+          <tr><td><span class="badge badge-good">200</span></td><td>OK</td><td class="small">อ่านหรือแก้ไขสำเร็จ</td></tr>
+          <tr><td><span class="badge badge-good">201</span></td><td>Created</td><td class="small">สร้างรายการใหม่สำเร็จ แนบ Location และ ETag</td></tr>
+          <tr><td><span class="badge badge-good">202</span></td><td>Accepted</td><td class="small">รับงานที่ประมวลผลแบบไม่รอผล (ตรวจคุณภาพ ส่งออก)</td></tr>
+          <tr><td><span class="badge badge-info">204</span></td><td>No Content</td><td class="small">ลบหรือยกเลิกใช้งานสำเร็จ</td></tr>
+          <tr><td><span class="badge badge-info">207</span></td><td>Multi-Status</td><td class="small">ซิงก์เป็นชุด ผลลัพธ์ต่างกันรายรายการ</td></tr>
+          <tr><td><span class="badge badge-info">304</span></td><td>Not Modified</td><td class="small">ETag ตรงกัน ไม่ต้องส่งข้อมูลซ้ำ</td></tr>
+          <tr><td><span class="badge badge-warning">400</span></td><td>Bad Request</td><td class="small">พารามิเตอร์ผิดรูปแบบ เช่น bbox ไม่ครบ 4 ค่า</td></tr>
+          <tr><td><span class="badge badge-warning">401</span></td><td>Unauthorized</td><td class="small">ไม่มีโทเค็นหรือโทเค็นหมดอายุ</td></tr>
+          <tr><td><span class="badge badge-serious">403</span></td><td>Forbidden</td><td class="small">กลุ่มสิทธิ์หรือขอบเขตชั้นข้อมูลไม่อนุญาต</td></tr>
+          <tr><td><span class="badge badge-warning">404</span></td><td>Not Found</td><td class="small">ไม่พบรายการ หรือผู้ใช้ไม่มีสิทธิ์เห็นรายการนั้น</td></tr>
+          <tr><td><span class="badge badge-serious">409</span></td><td>Conflict</td><td class="small">เวอร์ชันไม่ตรง รหัสรายการซ้ำ หรือพิกัดซ้ำตำแหน่ง</td></tr>
+          <tr><td><span class="badge badge-serious">422</span></td><td>Unprocessable Entity</td><td class="small">ข้อมูลไม่ผ่านกฎการตรวจ เช่น ฟิลด์บังคับว่าง</td></tr>
+          <tr><td><span class="badge badge-warning">428</span></td><td>Precondition Required</td><td class="small">ไม่ได้ส่ง If-Match หรือต้องยืนยันสองขั้นตอนก่อน</td></tr>
+          <tr><td><span class="badge badge-warning">429</span></td><td>Too Many Requests</td><td class="small">เกินอัตราการเรียก แนบ Retry-After</td></tr>
+          <tr><td><span class="badge badge-critical">500</span></td><td>Internal Server Error</td><td class="small">ข้อผิดพลาดที่ไม่คาดหมาย บันทึกพร้อม X-Request-Id</td></tr>
+          <tr><td><span class="badge badge-critical">503</span></td><td>Service Unavailable</td><td class="small">อยู่ระหว่างปรับปรุงระบบหรือฐานข้อมูลไม่พร้อม</td></tr>
+        </tbody></table></div>
+    </div>
+    <div class="card">
+      <div class="card-head"><h2>รูปแบบข้อความแจ้งข้อผิดพลาด</h2></div>
+      <div class="card-body" style="padding-top:12px">
+        <p class="small dim">ใช้รูปแบบ Problem Details (RFC 9457) ทุกกรณี พร้อมข้อความภาษาไทยที่เจ้าหน้าที่เข้าใจได้</p>
+<pre class="code dark">HTTP/1.1 422 Unprocessable Entity
+Content-Type: application/problem+json
+
+{
+  <span class="t">"type"</span>: <span class="s">"https://&lt;host&gt;/errors/validation-failed"</span>,
+  <span class="t">"title"</span>: <span class="s">"ข้อมูลไม่ผ่านการตรวจสอบ"</span>,
+  <span class="t">"status"</span>: <span class="n">422</span>,
+  <span class="t">"detail"</span>: <span class="s">"พบข้อผิดพลาด 2 รายการ"</span>,
+  <span class="t">"instance"</span>: <span class="s">"/api/v1/layers/L05/features"</span>,
+  <span class="t">"request_id"</span>: <span class="s">"3f7a90c2-1b84-4e55-9c01-77ad1e0b9c42"</span>,
+  <span class="t">"errors"</span>: [
+    { <span class="t">"field"</span>: <span class="s">"source_ref"</span>,
+      <span class="t">"rule"</span>: <span class="s">"QC-01"</span>,
+      <span class="t">"message"</span>: <span class="s">"ต้องระบุหลักฐานอ้างอิง"</span> },
+    { <span class="t">"field"</span>: <span class="s">"surveyed_on"</span>,
+      <span class="t">"rule"</span>: <span class="s">"QC-10"</span>,
+      <span class="t">"message"</span>: <span class="s">"วันที่สำรวจต้องไม่เป็นวันในอนาคต"</span> }
+  ]
+}</pre>
+        <p class="hint">ข้อความแจ้งข้อผิดพลาดไม่เปิดเผยโครงสร้างภายใน ชื่อตาราง หรือข้อความจากฐานข้อมูล
+          รายละเอียดทางเทคนิคบันทึกไว้ฝั่งเซิร์ฟเวอร์และอ้างอิงด้วย <code>request_id</code></p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="tabpanel" data-panel="f" hidden>
+  <div class="grid g2">
+    <div class="card"><div class="card-head"><h2>ตัวอย่างเงื่อนไขการกรอง</h2></div>
+      <div class="table-wrap"><table class="tbl compact">
+        <thead><tr><th>ต้องการ</th><th>เขียนอย่างไร</th></tr></thead>
+        <tbody>
+          <tr><td class="small">ถนนของ อบต. ที่ยังรอยืนยัน</td>
+            <td><code class="small">owner_agency_id=3 AND confirm_status_code='pending'</code></td></tr>
+          <tr><td class="small">ถนนลูกรังที่ต้องซ่อม</td>
+            <td><code class="small">surface_code='laterite' AND condition_code='needs_repair'</code></td></tr>
+          <tr><td class="small">ถนนยาวเกิน 1 กิโลเมตร</td>
+            <td><code class="small">length_m &gt; 1000</code></td></tr>
+          <tr><td class="small">สำรวจในเดือนตุลาคม 2569</td>
+            <td><code class="small">surveyed_on BETWEEN '2026-10-01' AND '2026-10-31'</code></td></tr>
+          <tr><td class="small">ชื่อมีคำว่า "คลอง"</td>
+            <td><code class="small">name_th LIKE '%คลอง%'</code></td></tr>
+          <tr><td class="small">เจ้าของกับผู้บำรุงรักษาไม่ตรงกัน</td>
+            <td><code class="small">owner_agency_id &lt;&gt; maintainer_agency_id</code></td></tr>
+          <tr><td class="small">อยู่ในพื้นที่ที่วาดบนแผนที่</td>
+            <td><code class="small">S_INTERSECTS(geom, POLYGON((...)))</code></td></tr>
+          <tr><td class="small">ห่างจากจุดที่กำหนดไม่เกิน 200 ม.</td>
+            <td><code class="small">S_DWITHIN(geom, POINT(101.246 12.852), 200)</code></td></tr>
+          <tr><td class="small">อยู่ในพื้นที่คลาดเคลื่อนของแนวเขต</td>
+            <td><code class="small">S_WITHIN(geom, boundary_discrepancy('BD-01'))</code></td></tr>
+        </tbody></table></div>
+      <div class="card-foot">ไวยากรณ์ตามมาตรฐาน OGC CQL2-Text ระบบแปลงเป็นเงื่อนไข SQL
+        แบบ parameterized เสมอ จึงไม่มีช่องทาง SQL injection</div>
+    </div>
+    <div class="card"><div class="card-head"><h2>ตัวอย่างการเรียกใช้จริง</h2></div>
+      <div class="card-body" style="padding-top:12px">
+        <div class="code-head">curl — ดึงถนนที่ต้องซ่อมในกรอบแผนที่</div>
+<pre class="code dark">curl -G <span class="s">"https://&lt;host&gt;/api/v1/layers/L01/features"</span> \\
+  -H <span class="s">"Authorization: Bearer &lt;ACCESS_TOKEN&gt;"</span> \\
+  --data-urlencode <span class="s">"bbox=101.2184,12.8014,101.3127,12.8906"</span> \\
+  --data-urlencode <span class="s">"filter=condition_code='needs_repair'"</span> \\
+  --data-urlencode <span class="s">"fields=feature_code,name_th,length_m,owner_agency_id"</span> \\
+  --data-urlencode <span class="s">"geometry=none"</span> \\
+  --data-urlencode <span class="s">"limit=200"</span></pre>
+        <div class="code-head" style="margin-top:14px">Python — สรุปความยาวถนนรายหน่วยงาน</div>
+<pre class="code dark"><span class="k">import</span> requests, collections
+
+<span class="t">BASE</span> = <span class="s">"https://&lt;host&gt;/api/v1"</span>
+<span class="t">H</span> = {<span class="s">"Authorization"</span>: <span class="s">"Bearer &lt;ACCESS_TOKEN&gt;"</span>}
+
+total, cursor = collections.Counter(), <span class="k">None</span>
+<span class="k">while True</span>:
+    p = {<span class="s">"limit"</span>: <span class="n">500</span>, <span class="s">"geometry"</span>: <span class="s">"none"</span>,
+         <span class="s">"fields"</span>: <span class="s">"owner_agency_id,length_m"</span>}
+    <span class="k">if</span> cursor: p[<span class="s">"cursor"</span>] = cursor
+    r = requests.get(<span class="k">f</span><span class="s">"{BASE}/layers/L01/features"</span>, headers=H, params=p).json()
+    <span class="k">for</span> f <span class="k">in</span> r[<span class="s">"features"</span>]:
+        total[f[<span class="s">"properties"</span>][<span class="s">"owner_agency_id"</span>]] += f[<span class="s">"properties"</span>][<span class="s">"length_m"</span>]
+    cursor = r.get(<span class="s">"next_cursor"</span>)
+    <span class="k">if not</span> cursor: <span class="k">break</span>
+
+<span class="k">for</span> agency, metres <span class="k">in</span> total.most_common():
+    <span class="k">print</span>(agency, <span class="k">round</span>(metres / <span class="n">1000</span>, <span class="n">1</span>), <span class="s">"กม."</span>)</pre>
+      </div></div>
+  </div>
+</div>
+
+<div class="tabpanel" data-panel="s" hidden>
+  <div class="grid g2">
+    <div class="card"><div class="card-head"><h2>มาตรการความปลอดภัยของ API</h2></div>
+      <div class="table-wrap"><table class="tbl compact">
+        <thead><tr><th style="width:170px">ด้าน</th><th>มาตรการ</th></tr></thead>
+        <tbody>
+          <tr><td>การเข้ารหัสระหว่างทาง</td><td class="small">TLS 1.3 เท่านั้น · HSTS · ปิดการเชื่อมต่อแบบ HTTP ทั้งหมด</td></tr>
+          <tr><td>การยืนยันตัวตน</td><td class="small">OAuth 2.0 / OIDC · JWT ลงนามด้วย RS256 · อายุโทเค็น 30 นาที</td></tr>
+          <tr><td>การอนุญาต</td><td class="small">ตรวจสองชั้น — ชั้น API ตามกลุ่มสิทธิ์ และชั้นฐานข้อมูลด้วย Row Level Security</td></tr>
+          <tr><td>การตรวจค่านำเข้า</td><td class="small">ตรวจตาม schema ของ OpenAPI ทุกคำขอ · ปฏิเสธฟิลด์ที่ไม่รู้จัก</td></tr>
+          <tr><td>การป้องกัน SQL injection</td><td class="small">คำสั่งแบบ parameterized ทุกกรณี · CQL2 แปลงผ่านตัวแยกวิเคราะห์ ไม่ต่อสตริง</td></tr>
+          <tr><td>การอัปโหลดไฟล์</td><td class="small">จำกัด 15 MB · ตรวจชนิดไฟล์จริงจาก magic number · สแกนไวรัสก่อนจัดเก็บ</td></tr>
+          <tr><td>อัตราการเรียก</td><td class="small">จำกัดรายผู้ใช้และรายที่อยู่ IP · ตอบ 429 พร้อม Retry-After</td></tr>
+          <tr><td>บันทึกการเข้าถึง</td><td class="small">ทุกคำขอบันทึก X-Request-Id · การเข้าถึงข้อมูลอ่อนไหวบันทึกแยกใน audit.access_log</td></tr>
+          <tr><td>ข้อมูลส่วนบุคคล</td><td class="small">ไม่ส่งข้อมูลส่วนบุคคลใน query string · ไม่บันทึกเนื้อหาคำขอที่มีข้อมูลส่วนบุคคลลง log</td></tr>
+          <tr><td>CORS</td><td class="small">อนุญาตเฉพาะโดเมนที่ลงทะเบียนไว้ · ไม่ใช้สัญลักษณ์ wildcard</td></tr>
+          <tr><td>การจัดการความลับ</td><td class="small">คีย์และรหัสผ่านเก็บในระบบจัดการความลับ ไม่อยู่ในไฟล์ตั้งค่าหรือซอร์สโค้ด</td></tr>
+          <tr><td>การทดสอบความปลอดภัย</td><td class="small">ตรวจตาม OWASP ASVS 4.0 ระดับ 2 ก่อนส่งมอบ และสแกนไลบรารีที่มีช่องโหว่ทุกเดือน</td></tr>
+        </tbody></table></div>
+    </div>
+    <div class="stack">
+      <div class="card"><div class="card-head"><h2>โครงสร้างของโทเค็น (JWT claims)</h2></div>
+        <div class="card-body" style="padding-top:12px">
+<pre class="code dark">{
+  <span class="t">"iss"</span>: <span class="s">"https://&lt;host&gt;"</span>,
+  <span class="t">"sub"</span>: <span class="s">"6f1b2d84-9c0a-4f31-b7de-5a2c91e4d007"</span>,
+  <span class="t">"aud"</span>: <span class="s">"geocore-api"</span>,
+  <span class="t">"exp"</span>: <span class="n">1790000000</span>,
+  <span class="t">"iat"</span>: <span class="n">1789998200</span>,
+  <span class="t">"jti"</span>: <span class="s">"1c7e...​"</span>,
+  <span class="t">"roles"</span>: [<span class="s">"both"</span>],
+  <span class="t">"scope"</span>: <span class="s">"feature.read feature.write feature.approve export.create"</span>,
+  <span class="t">"layer_scope"</span>: [<span class="s">"L01"</span>, <span class="s">"L02"</span>, <span class="s">"L04"</span>, <span class="s">"L08"</span>],
+  <span class="t">"org_unit"</span>: <span class="s">"กองช่าง"</span>
+}</pre>
+          <p class="hint">โทเค็นไม่บรรจุข้อมูลส่วนบุคคลเกินจำเป็น และตรวจสอบ <code>jti</code>
+            กับรายการโทเค็นที่ถูกเพิกถอนทุกคำขอ</p>
+        </div></div>
+      <div class="card"><div class="card-head"><h2>การส่งต่อบริบทผู้ใช้ไปยังฐานข้อมูล</h2></div>
+        <div class="card-body" style="padding-top:12px">
+<pre class="code dark"><span class="c">-- ตั้งค่าบริบทก่อนทุกคำสั่ง เพื่อให้ RLS และ trigger รู้ว่าใครเป็นผู้กระทำ</span>
+<span class="k">SET LOCAL</span> app.current_user      = <span class="s">'6f1b2d84-...'</span>;
+<span class="k">SET LOCAL</span> app.current_role_code = <span class="s">'both'</span>;
+<span class="k">SET LOCAL</span> app.client_ip         = <span class="s">'10.12.4.31'</span>;
+<span class="k">SET LOCAL</span> app.request_id        = <span class="s">'3f7a90c2-...'</span>;</pre>
+          <p class="hint">บริบทนี้ทำให้บันทึกการเปลี่ยนแปลงระบุผู้กระทำได้ถูกต้องเสมอ
+            แม้การแก้ไขจะเข้ามาทางคำสั่ง SQL โดยตรงจาก QGIS</p>
+        </div></div>
+    </div>
+  </div>
+</div>
+`;
+
+initTabs();
+
+document.getElementById('eps').innerHTML = SPECS.map(s => `
+  <article class="ep" id="${s.id}">
+    <header>
+      <span class="m m-${s.m}">${s.m}</span>
+      <code class="path" style="flex:1 1 260px">${fmtPath('/api/v1' + s.p)}</code>
+      <span class="badge badge-outline">${s.title}</span>
+    </header>
+    <div class="body">
+      <p class="small" style="margin-bottom:10px">${s.desc}</p>
+      <dl class="kv" style="grid-template-columns:110px 1fr;margin-bottom:4px">
+        <dt>กลุ่มสิทธิ์</dt><dd class="small">${s.role}</dd></dl>
+
+      ${s.params ? `<h4>พารามิเตอร์</h4>
+      <div class="table-wrap" style="border:1px solid var(--line);border-radius:var(--r-md)">
+        <table class="tbl compact">
+          <thead><tr><th>ชื่อ</th><th>ตำแหน่ง</th><th>ชนิด</th><th>คำอธิบาย</th><th>ค่าตั้งต้น</th></tr></thead>
+          <tbody>${s.params.map(p => `<tr><td class="mono small"><b>${p[0]}</b></td>
+            <td class="small">${p[1]}</td><td class="mono small">${p[2]}</td>
+            <td class="small">${p[3]}</td><td class="small muted">${p[4]}</td></tr>`).join('')}</tbody>
+        </table></div>` : ''}
+
+      <div class="two" style="margin-top:18px">
+        <div><div class="code-head">คำขอ (Request)</div><pre class="code dark">${esc(s.req)}</pre></div>
+        <div><div class="code-head">คำตอบ (Response)</div><pre class="code dark">${esc(s.res)}</pre></div>
+      </div>
+
+      ${s.extra ? `<h4>${s.extra.title}</h4><pre class="code dark">${esc(s.extra.code)}</pre>` : ''}
+
+      ${s.errors ? `<h4>ข้อผิดพลาดเฉพาะของ endpoint นี้</h4>
+        <div class="table-wrap" style="border:1px solid var(--line);border-radius:var(--r-md)">
+          <table class="tbl compact"><tbody>${s.errors.map(e =>
+            `<tr><td style="width:190px"><span class="badge badge-serious">${e[0]}</span></td>
+             <td class="small">${e[1]}</td></tr>`).join('')}</tbody></table></div>` : ''}
+
+      ${s.notes ? `<h4>หมายเหตุการใช้งาน</h4>
+        <ul class="small" style="padding-left:18px;margin:0">${s.notes.map(n => `<li>${n}</li>`).join('')}</ul>` : ''}
+    </div>
+  </article>`).join('');
+</script>
+</body>
+</html>

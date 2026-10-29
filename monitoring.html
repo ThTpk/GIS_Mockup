@@ -1,0 +1,271 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ตัวชี้วัดและการติดตาม — GeoCore GIS</title>
+<link rel="icon" href="assets/img/favicon.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/app.css">
+</head>
+<body>
+<main class="content"><div class="content-inner" id="root"></div></main>
+
+<script src="assets/js/data.js"></script>
+<script src="assets/js/shell.js"></script>
+<script>
+renderShell('monitoring.html');
+const root = document.getElementById('root');
+
+root.innerHTML = `
+${pageHead({
+  crumbs: ['<a href="index.html">หน้าแรก</a>', 'ตัวชี้วัดและการติดตาม'],
+  title: 'ตัวชี้วัดและการติดตามผล',
+  sub: 'ตัวชี้วัดคุณภาพข้อมูลและการให้บริการ รอบการทบทวน ผู้รับผิดชอบปรับปรุงข้อมูล และแนวทางสำรอง/ส่งต่อฐานข้อมูล',
+  actions: `<button class="btn" id="btnRep">${icon('file')} รายงานติดตามผล</button>
+            <button class="btn btn-primary" data-need="write-all" id="btnVal">${icon('plus')} บันทึกค่ารอบใหม่</button>`
+})}
+
+<div class="tabs" data-tabs>
+  <button data-tab="k" aria-selected="true">ตัวชี้วัด</button>
+  <button data-tab="r" aria-selected="false">รอบทบทวนและผู้รับผิดชอบ</button>
+  <button data-tab="b" aria-selected="false">การสำรองและส่งต่อข้อมูล</button>
+  <button data-tab="t" aria-selected="false">การถ่ายทอดความรู้</button>
+</div>
+
+<div class="tabpanel" data-panel="k">
+  <div class="grid g4 mb16" id="kpiTiles"></div>
+
+  <div class="card mb16">
+    <div class="card-head"><h2>ตัวชี้วัดทั้งหมด</h2><span class="spacer"></span>
+      <span class="hint">ตารางที่ 4 — ตัวชี้วัด เป้าหมาย และผู้รับผิดชอบ</span></div>
+    <div class="table-wrap">
+      <table class="tbl">
+        <thead><tr><th>รหัส</th><th>ตัวชี้วัด</th><th class="num">ค่าปัจจุบัน</th><th class="num">เป้าหมาย</th>
+          <th style="width:150px">ความคืบหน้า</th><th class="num">เปลี่ยนแปลง</th><th>รอบวัด</th><th>ผู้รับผิดชอบ</th></tr></thead>
+        <tbody id="kpiRows"></tbody>
+      </table>
+    </div>
+    <div class="card-foot">ค่าตัวชี้วัดคำนวณจากฐานข้อมูลโดยตรง ไม่ต้องกรอกด้วยมือ
+      ยกเว้นตัวชี้วัดด้านการอบรมที่บันทึกจากรายชื่อผู้เข้าร่วม</div>
+  </div>
+
+  <div class="grid g2">
+    <div class="card">
+      <div class="card-head"><h2>แนวโน้มความครบถ้วนของข้อมูล</h2></div>
+      <div class="card-body" id="trend1"></div>
+    </div>
+    <div class="card">
+      <div class="card-head"><h2>แนวโน้มการยืนยันเจ้าของทรัพย์สิน</h2></div>
+      <div class="card-body" id="trend2"></div>
+    </div>
+  </div>
+</div>
+
+<div class="tabpanel" data-panel="r" hidden>
+  <div class="grid g-2-1">
+    <div class="card">
+      <div class="card-head"><h2>รอบการทบทวนและผู้รับผิดชอบปรับปรุงข้อมูล</h2></div>
+      <div class="table-wrap">
+        <table class="tbl">
+          <thead><tr><th>ชั้นข้อมูล</th><th>ผู้รับผิดชอบ</th><th>รอบปรับปรุง</th><th>เงื่อนไขการปรับปรุงนอกรอบ</th><th>ทบทวนครั้งถัดไป</th></tr></thead>
+          <tbody>
+            <tr><td><b>L01</b> ถนน</td><td class="small">กองช่าง — ฝ่ายโครงสร้างพื้นฐาน</td><td class="small">ทุก 6 เดือน</td>
+              <td class="small">เมื่อมีการก่อสร้าง ปรับปรุง หรือถ่ายโอนภารกิจ</td><td class="small">เม.ย. 2570</td></tr>
+            <tr><td><b>L02</b> ไฟส่องสว่าง</td><td class="small">กองช่าง — ฝ่ายไฟฟ้า</td><td class="small">ทุก 3 เดือน</td>
+              <td class="small">เมื่อมีการติดตั้ง ซ่อม หรือถอดอุปกรณ์</td><td class="small">ม.ค. 2570</td></tr>
+            <tr><td><b>L03</b> CCTV</td><td class="small">กองช่าง — ฝ่ายไฟฟ้า</td><td class="small">ทุก 3 เดือน</td>
+              <td class="small">เมื่อกล้องออฟไลน์เกิน 7 วัน</td><td class="small">ม.ค. 2570</td></tr>
+            <tr><td><b>L04</b> สะพาน</td><td class="small">กองช่าง — ฝ่ายโครงสร้างพื้นฐาน</td><td class="small">ทุก 12 เดือน</td>
+              <td class="small">หลังอุทกภัยหรือเมื่อพบความเสียหาย</td><td class="small">ต.ค. 2570</td></tr>
+            <tr><td><b>L05</b> แหล่งน้ำและประปา</td><td class="small">กองช่าง — งานกิจการประปา</td><td class="small">ทุก 6 เดือน</td>
+              <td class="small">เมื่อขยายเขตจ่ายน้ำหรือเปลี่ยนระบบผลิต</td><td class="small">เม.ย. 2570</td></tr>
+            <tr><td><b>L06</b> ทางระบายน้ำ</td><td class="small">กองสาธารณสุขฯ</td><td class="small">ทุก 3 เดือน</td>
+              <td class="small">หลังฤดูฝน และเมื่อมีเรื่องร้องเรียน</td><td class="small">ม.ค. 2570</td></tr>
+            <tr><td><b>L07</b> พื้นที่สาธารณะ</td><td class="small">กองการศึกษา ร่วมกับกองช่าง</td><td class="small">ทุก 12 เดือน</td>
+              <td class="small">เมื่อมีการปรับปรุงหรือเปลี่ยนการใช้ประโยชน์</td><td class="small">ก.ย. 2570</td></tr>
+            <tr><td><b>L08</b> แนวเขต</td><td class="small">สำนักปลัด — งานนิติการ</td><td class="small">เมื่อมีการเปลี่ยนแปลง</td>
+              <td class="small">เมื่อมีประกาศหรือข้อตกลงแนวเขตใหม่</td><td class="small">ตามเหตุการณ์</td></tr>
+            <tr><td><b>L09 · L10</b> ชั้นข้อมูลเดิม</td><td class="small">กองคลัง — งานแผนที่ภาษี</td><td class="small">ตามรอบจัดเก็บภาษี</td>
+              <td class="small">เมื่อมีการแบ่งแปลงหรือออกเลขที่บ้านใหม่</td><td class="small">ม.ค. 2570</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-head"><h2>ปฏิทินการทบทวน</h2></div>
+      <div class="card-body">
+        <ul class="tl" style="margin:0">
+          <li class="now"><div class="tt">พ.ย. 2569 — ทบทวนรายเดือน</div>
+            <div class="td">ตรวจข้อค้นพบ QC คงค้าง · ตรวจความครบถ้วนฟิลด์บังคับ · รายงานต่อหัวหน้าส่วนราชการ</div></li>
+          <li><div class="tt">ม.ค. 2570 — ทบทวนรายไตรมาส</div>
+            <div class="td">ปรับปรุงชั้นข้อมูล L02, L03, L06 · ทบทวนสิทธิ์ผู้ใช้งานทุกบัญชี</div></li>
+          <li><div class="tt">ก.พ. 2570 — ส่งมอบงวดสุดท้าย</div>
+            <div class="td">ฐานข้อมูลฉบับสมบูรณ์ · ทดสอบบนเครื่องผู้ว่าจ้าง · คู่มือและรายงานอบรม</div></li>
+          <li><div class="tt">เม.ย. 2570 — ทบทวนราย 6 เดือน</div>
+            <div class="td">ปรับปรุงชั้นข้อมูล L01, L05 · ทบทวนกฎการตรวจคุณภาพ</div></li>
+          <li><div class="tt">ต.ค. 2570 — ทบทวนประจำปี</div>
+            <div class="td">ทบทวนทะเบียนชั้นข้อมูลทั้งหมด · ปรับปรุง Metadata · ประเมินผลตัวชี้วัด</div></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="tabpanel" data-panel="b" hidden>
+  <div class="grid g2">
+    <div class="card">
+      <div class="card-head"><h2>นโยบายการสำรองข้อมูล</h2></div>
+      <div class="table-wrap">
+        <table class="tbl compact">
+          <tbody>
+            <tr><td style="font-weight:600;background:var(--surface-2);width:160px">สำรองเต็ม</td>
+              <td class="small">ทุกวัน เวลา 01:00 · เก็บ 30 รุ่น</td></tr>
+            <tr><td style="font-weight:600;background:var(--surface-2)">สำรองต่อเนื่อง</td>
+              <td class="small">WAL archiving สำหรับกู้คืน ณ เวลาที่ต้องการ (PITR) ย้อนหลัง 14 วัน</td></tr>
+            <tr><td style="font-weight:600;background:var(--surface-2)">สำรองนอกสถานที่</td>
+              <td class="small">สำเนารายสัปดาห์ไปยังที่เก็บแยกสถานที่ · เข้ารหัสขณะส่งและขณะจัดเก็บ</td></tr>
+            <tr><td style="font-weight:600;background:var(--surface-2)">ไฟล์แนบและภาพถ่าย</td>
+              <td class="small">สำรองพร้อมฐานข้อมูล ตรวจความสอดคล้องของรายการอ้างอิงทุกเดือน</td></tr>
+            <tr><td style="font-weight:600;background:var(--surface-2)">ทดสอบการกู้คืน</td>
+              <td class="small">ทุกไตรมาส กู้คืนลงเครื่องทดสอบและตรวจจำนวนรายการเทียบต้นทาง</td></tr>
+            <tr><td style="font-weight:600;background:var(--surface-2)">เป้าหมายการกู้คืน</td>
+              <td class="small">RPO ≤ 15 นาที · RTO ≤ 4 ชั่วโมง</td></tr>
+            <tr><td style="font-weight:600;background:var(--surface-2)">ผู้รับผิดชอบ</td>
+              <td class="small">ผู้ดูแลระบบ · รายงานผลการสำรองต่อหัวหน้าส่วนราชการทุกเดือน</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="card-foot">สถานะล่าสุด: สำรองสำเร็จ 29 ต.ค. 2569 02:00 · ขนาด 4.8 GB ·
+        <span class="badge badge-good">ทดสอบกู้คืนล่าสุดผ่าน (12 ต.ค. 2569)</span></div>
+    </div>
+    <div class="card">
+      <div class="card-head"><h2>แนวทางส่งต่อฐานข้อมูล</h2></div>
+      <div class="card-body">
+        <p class="small dim">ข้อกำหนดขอบเขตของงานกำหนดให้เสนอแนวทางสำรองและส่งต่อฐานข้อมูล
+          เพื่อให้หน่วยงานใช้งานต่อได้เองหลังสิ้นสุดสัญญา</p>
+        <ol style="padding-left:18px;font-size:.86rem">
+          <li><b>ส่งมอบในรูปแบบมาตรฐานเปิด</b> — GeoPackage และ PostgreSQL dump
+            ไม่ผูกกับซอฟต์แวร์เฉพาะราย เปิดด้วย QGIS ซึ่งเป็นซอฟต์แวร์เสรีได้</li>
+          <li><b>ใช้พาธสัมพัทธ์ในทุกโครงการ</b> — คัดลอกทั้งโฟลเดอร์ไปเครื่องอื่นแล้วเปิดได้โดยไม่ต้องตั้งค่าใหม่</li>
+          <li><b>ส่งมอบสคริปต์สร้างฐานข้อมูล</b> — ไฟล์ SQL สร้างตาราง ดัชนี trigger และตารางค่าอ้างอิงทั้งหมด</li>
+          <li><b>ส่งมอบพจนานุกรมข้อมูลและ Metadata</b> — ให้เจ้าหน้าที่เข้าใจความหมายของทุกฟิลด์โดยไม่ต้องถามผู้จัดทำ</li>
+          <li><b>กำหนดผู้รับผิดชอบรายชั้นข้อมูล</b> — ระบุไว้ในทะเบียนชั้นข้อมูล พร้อมรอบการปรับปรุง</li>
+          <li><b>อบรมและส่งมอบคู่มือ</b> — ครอบคลุมการเปิด แก้ไข ค้นหา วิเคราะห์ และปรับปรุงฐานข้อมูล</li>
+          <li><b>กำหนดช่วงรับประกันและแก้ไขข้อบกพร่อง</b> — แก้ไขภายใน 15 วันนับจากได้รับแจ้งโดยไม่คิดค่าใช้จ่ายเพิ่ม</li>
+        </ol>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="tabpanel" data-panel="t" hidden>
+  <div class="grid g-2-1">
+    <div class="card">
+      <div class="card-head"><h2>แผนการฝึกอบรมเจ้าหน้าที่</h2><span class="spacer"></span>
+        <span class="badge badge-good">ดำเนินการแล้ว 2 / 2 ครั้ง</span></div>
+      <div class="table-wrap">
+        <table class="tbl">
+          <thead><tr><th>ครั้งที่</th><th>หัวข้อ</th><th>กลุ่มเป้าหมาย</th><th class="num">ผู้เข้าร่วม</th><th>วันที่</th><th>ผลประเมิน</th></tr></thead>
+          <tbody>
+            <tr><td>1</td><td>การใช้งานระบบพื้นฐาน — เปิด ค้นหา แสดงผล และส่งออกข้อมูล</td>
+              <td class="small">เจ้าหน้าที่ทุกกอง</td><td class="num">18</td><td class="small">14 ม.ค. 2570</td>
+              <td><span class="badge badge-good">ผ่าน 18/18</span></td></tr>
+            <tr><td>2</td><td>การบันทึก แก้ไข ตรวจสอบ และวิเคราะห์ข้อมูลเชิงพื้นที่</td>
+              <td class="small">กองช่าง · กองสาธารณสุขฯ · กองคลัง</td><td class="num">16</td><td class="small">11 ก.พ. 2570</td>
+              <td><span class="badge badge-good">ผ่าน 14/16</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="card-foot">ส่งมอบคู่มือ แบบฝึกหัด รายชื่อผู้เข้าร่วม ภาพถ่าย และผลประเมินการเรียนรู้ครบทุกครั้ง
+        ตามข้อกำหนดขั้นต่ำ 2 ครั้ง ครั้งละไม่น้อยกว่า 15 คน</div>
+    </div>
+    <div class="card">
+      <div class="card-head"><h2>เนื้อหาการอบรม</h2></div>
+      <div class="card-body">
+        <details class="acc" open><summary>ครั้งที่ 1 — การใช้งานพื้นฐาน (6 ชั่วโมง)</summary>
+          <div class="acc-body small">
+            <ul style="padding-left:16px;margin:0">
+              <li>ภาพรวมฐานข้อมูลและความหมายของชั้นข้อมูลทั้ง 10 ชั้น</li>
+              <li>เปิดโครงการ QGIS จากสื่อบันทึกข้อมูลและจากระบบ</li>
+              <li>ค้นหา กรอง และเปิดดูตารางคุณลักษณะ</li>
+              <li>พิมพ์แผนที่ PDF และส่งออกตาราง XLSX/CSV</li>
+              <li>อ่านพจนานุกรมข้อมูลและ Metadata</li>
+            </ul></div></details>
+        <details class="acc"><summary>ครั้งที่ 2 — การบันทึกและวิเคราะห์ (6 ชั่วโมง)</summary>
+          <div class="acc-body small">
+            <ul style="padding-left:16px;margin:0">
+              <li>บันทึกรายการใหม่และแก้ไขรูปทรงเชิงพื้นที่</li>
+              <li>สำรวจภาคสนามบนมือถือและการซิงก์ข้อมูล</li>
+              <li>ตรวจคุณภาพข้อมูลและการแก้ไขข้อค้นพบ</li>
+              <li>วิเคราะห์เชิงพื้นที่เบื้องต้น (ค้นรายการใกล้เคียง พื้นที่กันชน การตัดกัน)</li>
+              <li>การสำรองข้อมูลและการกู้คืน</li>
+            </ul></div></details>
+        <details class="acc"><summary>สื่อประกอบที่ส่งมอบ</summary>
+          <div class="acc-body small">
+            <ul style="padding-left:16px;margin:0">
+              <li>คู่มือการใช้งานฉบับเต็ม (PDF · พร้อมภาพประกอบทุกขั้นตอน)</li>
+              <li>คู่มือฉบับย่อ 2 หน้า สำหรับติดหน้าโต๊ะทำงาน</li>
+              <li>แบบฝึกหัด 12 ข้อ พร้อมชุดข้อมูลทดลอง</li>
+              <li>วีดิทัศน์สาธิต 8 ตอน ตอนละไม่เกิน 6 นาที</li>
+              <li>แบบประเมินการเรียนรู้ก่อน/หลังการอบรม</li>
+            </ul></div></details>
+      </div>
+    </div>
+  </div>
+</div>
+`;
+
+initTabs();
+
+document.getElementById('kpiTiles').innerHTML = KPIS.slice(0, 4).map(k => {
+  const pct = k.unit === '%' ? k.value : (k.target ? Math.min(100, k.value / k.target * 100) : 0);
+  const good = k.code === 'KPI-03' ? k.value <= k.target : k.value >= k.target * .95;
+  return `<div class="stat">
+    <div class="lbl">${k.name}</div>
+    <div class="val num">${k.value}<span style="font-size:.9rem;font-weight:500;color:var(--ink-3)"> ${k.unit}</span></div>
+    <div class="foot">เป้าหมาย ${k.target} ${k.unit} ·
+      <span class="${(k.code === 'KPI-03' || k.code === 'KPI-04') ? (k.trend < 0 ? 'delta-up' : 'delta-down') : (k.trend >= 0 ? 'delta-up' : 'delta-down')}">
+      ${k.trend > 0 ? '+' : ''}${k.trend}</span></div>
+    <div class="progress mt8"><i style="width:${pct}%;background:${good ? 'var(--good)' : 'var(--warning)'}"></i></div>
+  </div>`;
+}).join('');
+
+document.getElementById('kpiRows').innerHTML = KPIS.map(k => {
+  const pct = k.unit === '%' ? k.value : (k.target ? Math.min(100, k.target ? (k.code === 'KPI-03' || k.code === 'KPI-04'
+    ? (k.value <= k.target ? 100 : Math.max(0, 100 - (k.value - k.target) / Math.max(k.target, 1) * 100))
+    : k.value / k.target * 100) : 0) : 0);
+  const good = (k.code === 'KPI-03' || k.code === 'KPI-04') ? k.value <= k.target : k.value >= k.target * .95;
+  return `<tr>
+    <td class="mono">${k.code}</td><td>${k.name}</td>
+    <td class="num"><b>${k.value}</b> ${k.unit}</td><td class="num">${k.target} ${k.unit}</td>
+    <td><div class="progress"><i style="width:${pct.toFixed(0)}%;background:${good ? 'var(--good)' : 'var(--warning)'}"></i></div>
+      <span class="xsmall num muted">${pct.toFixed(0)}%</span></td>
+    <td class="num"><span class="${(k.code === 'KPI-03' || k.code === 'KPI-04') ? (k.trend < 0 ? 'delta-up' : k.trend > 0 ? 'delta-down' : 'muted') : (k.trend > 0 ? 'delta-up' : k.trend < 0 ? 'delta-down' : 'muted')}">
+      ${k.trend > 0 ? '+' : ''}${k.trend}</span></td>
+    <td class="small">${k.cycle}</td><td class="small">${k.owner}</td></tr>`;
+}).join('');
+
+document.getElementById('trend1').innerHTML = lineChart([{
+  color: 'var(--s1)',
+  points: [{ t: 'มิ.ย.', v: 72 }, { t: 'ก.ค.', v: 81 }, { t: 'ส.ค.', v: 88 },
+           { t: 'ก.ย.', v: 93 }, { t: 'ต.ค.', v: 97.4 }]
+}], { min: 60, max: 100, aria: 'ความครบถ้วนของฟิลด์บังคับรายเดือน' })
+  + `<p class="small muted mt8" style="margin-bottom:0">ความครบถ้วนของฟิลด์บังคับ (%) · เป้าหมาย 100%</p>`;
+
+document.getElementById('trend2').innerHTML = lineChart([{
+  color: 'var(--s3)',
+  points: [{ t: 'มิ.ย.', v: 58 }, { t: 'ก.ค.', v: 66 }, { t: 'ส.ค.', v: 78 },
+           { t: 'ก.ย.', v: 87.1 }, { t: 'ต.ค.', v: 91.2 }]
+}], { min: 50, max: 100, aria: 'สัดส่วนรายการที่ยืนยันเจ้าของแล้วรายเดือน' })
+  + `<p class="small muted mt8" style="margin-bottom:0">สัดส่วนรายการที่ยืนยันเจ้าของทรัพย์สินแล้ว (%) ·
+     คงเหลือ 147 รายการสถานะ "รอยืนยัน"</p>`;
+
+document.getElementById('btnRep').onclick = () => toast('สร้างรายงานติดตามผลรายเดือน พร้อมกราฟและข้อเสนอแนะ', 'file');
+const bv = document.getElementById('btnVal');
+if (bv) bv.onclick = () => toast('บันทึกค่าตัวชี้วัดรอบใหม่ — ค่าที่คำนวณจากฐานข้อมูลจะเติมให้อัตโนมัติ', 'plus');
+</script>
+</body>
+</html>

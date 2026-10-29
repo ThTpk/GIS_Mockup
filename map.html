@@ -1,0 +1,397 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>แผนที่และชั้นข้อมูล — GeoCore GIS</title>
+<link rel="icon" href="assets/img/favicon.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link rel="stylesheet" href="assets/css/app.css">
+<style>
+  .leaflet-container { background: transparent; font-family: var(--font); }
+  .leaflet-control-attribution { font-size: 10px; background: color-mix(in srgb, var(--surface-1) 85%, transparent); color: var(--ink-3); }
+  .leaflet-control-attribution a { color: var(--ink-2); }
+  .leaflet-control-zoom { display: none; }
+  .mapstage { min-height: 600px; }
+  @media (max-width: 680px) { .mapstage { min-height: 440px; } }
+</style>
+</head>
+<body>
+<main class="content"><div class="content-inner" id="root"></div></main>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="assets/js/data.js"></script>
+<script src="assets/js/geodata.js"></script>
+<script src="assets/js/shell.js"></script>
+<script>
+renderShell('map.html');
+const root = document.getElementById('root');
+
+root.innerHTML = `
+${pageHead({
+  crumbs: ['<a href="index.html">หน้าแรก</a>', 'แผนที่และชั้นข้อมูล'],
+  title: 'แผนที่และชั้นข้อมูล',
+  sub: 'เปิด/ปิดชั้นข้อมูล ค้นหารายการ วัดระยะ และดูรายละเอียดเชิงคุณลักษณะของแต่ละรายการ',
+  actions: `<button class="btn" id="btnPrint">${icon('file')} พิมพ์แผนที่ PDF</button>
+            <button class="btn" data-need="write" id="btnAdd">${icon('plus')} เพิ่มรายการบนแผนที่</button>`
+})}
+
+<div class="ro-banner">${icon('info')}<span>กำลังดูในสิทธิ์ <b>ผู้อ่านข้อมูล</b> — เครื่องมือวาดและแก้ไขรูปทรงถูกปิดไว้</span></div>
+
+<div class="maplayout">
+  <aside class="mappanel">
+    <div class="mappanel-sec">
+      <h3>แผนที่ฐาน</h3>
+      <div class="segmented" style="width:100%" id="basemaps">
+        <button aria-pressed="true"  data-bm="gray"  style="flex:1">เรียบ</button>
+        <button aria-pressed="false" data-bm="osm"   style="flex:1">ถนน</button>
+        <button aria-pressed="false" data-bm="sat"   style="flex:1">ภาพถ่าย</button>
+        <button aria-pressed="false" data-bm="none"  style="flex:1">ไม่มี</button>
+      </div>
+    </div>
+    <div class="mappanel-sec">
+      <h3>ชั้นข้อมูล (10 ชั้น)</h3>
+      <div id="layerList"></div>
+      <div class="row row-tight mt8">
+        <button class="btn btn-sm btn-ghost" id="allOn">เปิดทั้งหมด</button>
+        <button class="btn btn-sm btn-ghost" id="allOff">ปิดทั้งหมด</button>
+      </div>
+    </div>
+    <div class="mappanel-sec">
+      <h3>ตัวกรองข้อมูล</h3>
+      <div class="field" style="margin-bottom:9px">
+        <label for="fAgency">หน่วยงานรับผิดชอบ</label>
+        <select id="fAgency">
+          <option value="">ทั้งหมด</option>
+          <option>อบต.</option><option>อบจ.</option><option>ทช.</option>
+          <option>ทล.</option><option>เอกชน</option><option>รอยืนยัน</option>
+        </select>
+      </div>
+      <div class="field" style="margin-bottom:9px">
+        <label for="fStatus">สถานะการยืนยันเจ้าของ</label>
+        <select id="fStatus">
+          <option value="">ทั้งหมด</option>
+          <option value="confirmed">ยืนยันแล้ว</option>
+          <option value="pending">รอยืนยัน</option>
+          <option value="conflict">ข้อมูลขัดแย้ง</option>
+        </select>
+      </div>
+      <label class="check"><input type="checkbox" id="fProblem"><span>แสดงเฉพาะรายการที่ต้องแก้ไข</span></label>
+      <div class="xsmall muted" id="filterInfo"></div>
+    </div>
+    <div class="mappanel-sec" style="border-bottom:0">
+      <h3>การแสดงผล</h3>
+      <label class="check"><input type="checkbox" id="optLabel"><span>แสดงป้ายชื่อรายการ</span></label>
+      <label class="check"><input type="checkbox" id="optCluster" checked><span>รวมกลุ่มจุดเมื่อย่อแผนที่</span></label>
+      <label class="check"><input type="checkbox" id="optBoundary" checked><span>เน้นแนวเขตพื้นที่ศึกษา</span></label>
+    </div>
+  </aside>
+
+  <div class="mapstage">
+    <div class="mapcanvas" id="mapfallback"></div>
+    <div id="map"></div>
+
+    <div class="mapsearch">
+      <input type="search" id="mapSearch" placeholder="ค้นหารหัสรายการ ชื่อถนน หรือพิกัด…" aria-label="ค้นหาบนแผนที่">
+    </div>
+
+    <div class="maptools">
+      <button class="mapctl" id="zIn"  title="ขยาย" aria-label="ขยาย">${icon('plus')}</button>
+      <button class="mapctl" id="zOut" title="ย่อ" aria-label="ย่อ"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M5 12h14"/></svg></button>
+      <button class="mapctl" id="tHome"  title="กลับไปขอบเขตพื้นที่" aria-label="กลับไปขอบเขตพื้นที่">${icon('home')}</button>
+      <button class="mapctl" id="tMeasure" title="วัดระยะทาง" aria-label="วัดระยะทาง">${icon('ruler')}</button>
+      <button class="mapctl" id="tLocate"  title="ตำแหน่งปัจจุบัน" aria-label="ตำแหน่งปัจจุบัน">${icon('target')}</button>
+      <button class="mapctl" data-need="write" id="tDraw" title="วาดรูปทรงใหม่" aria-label="วาดรูปทรงใหม่">${icon('pencil')}</button>
+    </div>
+
+    <div class="maplegend" id="legend"></div>
+    <div class="mapscale" id="scale">มาตราส่วนโดยประมาณ 1:12,000</div>
+  </div>
+</div>
+
+<div class="grid g-2-1 mt16">
+  <div class="card">
+    <div class="card-head"><h2>รายการในมุมมองปัจจุบัน</h2><span class="spacer"></span>
+      <span class="hint" id="visCount"></span>
+      <a class="btn btn-sm" href="attribute-table.html">เปิดตารางข้อมูลเต็ม</a></div>
+    <div class="table-wrap">
+      <table class="tbl compact">
+        <thead><tr><th>รหัส</th><th>ชื่อรายการ</th><th>ชั้นข้อมูล</th><th>เจ้าของ</th><th>สถานะยืนยัน</th></tr></thead>
+        <tbody id="visRows"></tbody>
+      </table>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-head"><h2>สรุปมุมมอง</h2></div>
+    <div class="card-body" id="viewSummary"></div>
+  </div>
+</div>
+
+<div class="notice notice-info mt16">${icon('info')}<div>
+  <strong>การแสดงผลเชิงเทคนิค</strong>
+  ชั้นข้อมูลถูกส่งมาเป็น Vector Tile (<code>ST_AsMVT</code>) จากฐานข้อมูล PostGIS โดยตรง
+  ทำให้เปิดชั้นข้อมูลที่มีหลายหมื่นรายการบนมือถือได้โดยไม่ต้องดาวน์โหลดทั้งชั้น
+  การกรองข้อมูลประมวลผลฝั่งฐานข้อมูลด้วยดัชนี GiST
+  <span class="muted">(หน้าจอตัวอย่างนี้ใช้ข้อมูลสังเคราะห์ที่สร้างในเบราว์เซอร์)</span></div></div>
+`;
+
+/* ---------- Leaflet ---------- */
+const map = L.map('map', { zoomControl: false, attributionControl: true }).setView(CENTER, 13);
+const basemaps = {
+  gray: L.tileLayer('https://services.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}',
+    { maxZoom: 16, attribution: 'แผนที่ฐาน — Esri, HERE, Garmin' }),
+  osm: L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+    { maxZoom: 19, attribution: '© ผู้ร่วมจัดทำ OpenStreetMap' }),
+  sat: L.tileLayer('https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+    { maxZoom: 18, attribution: 'ภาพถ่ายดาวเทียม — Esri' })
+};
+let activeBase = basemaps.gray.addTo(map);
+
+/* Leaflet เขียนสีลงใน presentation attribute จึงต้องแปลงตัวแปร CSS เป็นค่าสีจริงก่อน */
+function cv(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || '#2a78d6'; }
+const layerStyle = {
+  L01: f => ({ color: cv('--s1'), weight: f.properties.road_class === 'highway' ? 5 : f.properties.road_class === 'main' ? 3.5 : 2, opacity: .9 }),
+  L07: () => ({ color: cv('--s6'), weight: 1.5, fillColor: cv('--s6'), fillOpacity: .25 }),
+  L08: f => f.properties.code === 'AB-001'
+    ? { color: cv('--s8'), weight: 2, dashArray: '7 5', fill: false }
+    : { color: cv('--s8'), weight: 1.5, fillColor: cv('--s8'), fillOpacity: .22 }
+};
+const ptColor = () => ({ L02: cv('--s4'), L03: cv('--s7'), L04: cv('--s2'), L05: cv('--s3'), L06: cv('--s5') });
+
+const groups = {};
+Object.keys(GEO).forEach(code => {
+  const def = GEO[code];
+  groups[code] = L.geoJSON(def.fc, {
+    style: layerStyle[code],
+    pointToLayer: (f, latlng) => L.circleMarker(latlng, {
+      radius: code === 'L04' ? 6 : 5, color: cv('--surface-1'), weight: 1.5,
+      fillColor: ptColor()[code], fillOpacity: 1
+    }),
+    onEachFeature: (f, lyr) => {
+      lyr.on('click', () => showIdentify(f));
+      if (code === 'L01') lyr.bindTooltip(f.properties.name, { sticky: true, opacity: .95 });
+    }
+  });
+});
+['L08', 'L07', 'L01', 'L05', 'L06', 'L04', 'L02', 'L03'].forEach(c => groups[c].addTo(map));
+
+/* legacy layers: ไม่มีข้อมูลตัวอย่างเชิงพื้นที่ แสดงเป็นชั้นข้อมูลที่เชื่อมโยงไว้ */
+const PLACEHOLDER = ['L09', 'L10'];
+
+/* ---------- layer panel ---------- */
+document.getElementById('layerList').innerHTML = LAYERS.map(l => `
+  <label class="layerrow">
+    <input type="checkbox" ${PLACEHOLDER.includes(l.code) ? '' : 'checked'} data-layer="${l.code}"
+      ${PLACEHOLDER.includes(l.code) ? 'disabled' : ''}>
+    <span class="sym">${symbolSwatch(l)}</span>
+    <span class="nm" title="${l.name}">${l.code} ${l.name}</span>
+    <span class="ct">${fmt(l.count)}</span>
+  </label>`).join('') +
+  `<p class="xsmall muted mt8" style="margin-bottom:0">L09 และ L10 เป็นชั้นข้อมูลเดิมที่เชื่อมโยงไว้
+   เปิดดูได้ในระบบจริง (ตัวอย่างนี้ไม่ได้จำลองรูปทรง)</p>`;
+
+document.querySelectorAll('[data-layer]').forEach(cb => cb.addEventListener('change', () => {
+  const g = groups[cb.dataset.layer]; if (!g) return;
+  cb.checked ? g.addTo(map) : map.removeLayer(g);
+  paintLegend(); refreshVisible();
+}));
+document.getElementById('allOn').onclick = () => toggleAll(true);
+document.getElementById('allOff').onclick = () => toggleAll(false);
+function toggleAll(on) {
+  document.querySelectorAll('[data-layer]:not([disabled])').forEach(cb => {
+    cb.checked = on; const g = groups[cb.dataset.layer];
+    on ? g.addTo(map) : map.removeLayer(g);
+  });
+  paintLegend(); refreshVisible();
+}
+
+/* ---------- legend ---------- */
+function paintLegend() {
+  const on = LAYERS.filter(l => { const cb = document.querySelector(`[data-layer="${l.code}"]`); return cb && cb.checked; });
+  document.getElementById('legend').innerHTML = `<h4>คำอธิบายสัญลักษณ์</h4>` +
+    (on.length ? on.map(l => `<div class="lg"><span class="sw">${symbolSwatch(l)}</span>${l.name}</div>`).join('')
+      : '<div class="small muted">ยังไม่ได้เปิดชั้นข้อมูลใด</div>');
+}
+paintLegend();
+
+/* ---------- identify ---------- */
+let idPanel = null;
+function showIdentify(f) {
+  if (idPanel) idPanel.remove();
+  const p = f.properties;
+  const lay = LAYERS.find(l => l.code === p.layer);
+  const skip = ['layer'];
+  const rows = Object.keys(p).filter(k => !skip.includes(k) && p[k] !== undefined && p[k] !== '')
+    .map(k => `<dt>${PROP_LABEL[k] || k}</dt><dd>${p[k]}</dd>`).join('');
+  idPanel = document.createElement('div');
+  idPanel.className = 'identify';
+  idPanel.innerHTML = `
+    <header>${symbolSwatch(lay)}<strong>${p.code}</strong>
+      <span class="spacer" style="flex:1"></span>
+      <button class="iconbtn" data-x aria-label="ปิด">${icon('x')}</button></header>
+    <div class="body">
+      <div class="small dim mb8">${lay.code} · ${lay.name}</div>
+      <dl class="kv">${rows}</dl>
+    </div>
+    <footer>
+      <a class="btn btn-sm" href="attribute-table.html">ดูในตาราง</a>
+      <button class="btn btn-sm" data-need="write">${icon('pencil')} แก้ไข</button>
+      <span style="flex:1"></span>
+      <button class="btn btn-sm btn-ghost" data-zoom>ซูมไปที่รายการ</button>
+    </footer>`;
+  document.querySelector('.mapstage').appendChild(idPanel);
+  idPanel.querySelector('[data-x]').onclick = () => { idPanel.remove(); idPanel = null; };
+  idPanel.querySelector('[data-zoom]').onclick = () => {
+    const g = f.geometry;
+    if (g.type === 'Point') map.setView([g.coordinates[1], g.coordinates[0]], 17);
+    else map.fitBounds(L.geoJSON(f).getBounds(), { padding: [40, 40] });
+  };
+  const edit = idPanel.querySelector('[data-need="write"]');
+  if (edit) edit.onclick = () => location.href = 'data-entry.html';
+}
+
+/* ---------- tools ---------- */
+document.getElementById('zIn').onclick = () => map.zoomIn();
+document.getElementById('zOut').onclick = () => map.zoomOut();
+document.getElementById('tHome').onclick = () => { map.setView(CENTER, 13); toast('กลับไปยังขอบเขตพื้นที่ศึกษา', 'home'); };
+let measuring = false, mPts = [], mLayer = null;
+document.getElementById('tMeasure').onclick = e => {
+  measuring = !measuring;
+  e.currentTarget.setAttribute('aria-pressed', String(measuring));
+  if (!measuring) { if (mLayer) { map.removeLayer(mLayer); mLayer = null; } mPts = []; }
+  else toast('คลิกบนแผนที่เพื่อวัดระยะ — คลิกปุ่มอีกครั้งเพื่อหยุด', 'ruler');
+};
+map.on('click', e => {
+  if (!measuring) return;
+  mPts.push(e.latlng);
+  if (mLayer) map.removeLayer(mLayer);
+  mLayer = L.polyline(mPts, { color: cv('--s2'), weight: 3, dashArray: '6 4' }).addTo(map);
+  let d = 0; for (let i = 1; i < mPts.length; i++) d += mPts[i - 1].distanceTo(mPts[i]);
+  if (mPts.length > 1) mLayer.bindTooltip(`ระยะรวม ${d.toFixed(1)} ม. (${(d / 1000).toFixed(2)} กม.)`, { permanent: true, direction: 'top' }).openTooltip();
+});
+document.getElementById('tLocate').onclick = () => toast('ตัวอย่างหน้าจอ — ระบบจริงจะขอสิทธิ์เข้าถึงตำแหน่งจากอุปกรณ์', 'target');
+const dr = document.getElementById('tDraw'); if (dr) dr.onclick = () => location.href = 'data-entry.html';
+document.getElementById('btnPrint').onclick = () => toast('กำลังจัดหน้าแผนที่ A3 พร้อมคำอธิบายสัญลักษณ์และตราสัญลักษณ์หน่วยงาน', 'file');
+const ba = document.getElementById('btnAdd'); if (ba) ba.onclick = () => location.href = 'data-entry.html';
+
+/* basemap */
+document.querySelectorAll('#basemaps button').forEach(b => b.onclick = () => {
+  document.querySelectorAll('#basemaps button').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+  if (activeBase) map.removeLayer(activeBase);
+  activeBase = basemaps[b.dataset.bm] || null;
+  if (activeBase) activeBase.addTo(map);
+});
+
+/* search */
+document.getElementById('mapSearch').addEventListener('keydown', e => {
+  if (e.key !== 'Enter') return;
+  const q = e.target.value.trim().toLowerCase();
+  if (!q) return;
+  let hit = null;
+  Object.values(GEO).some(d => d.fc.features.some(f => {
+    if ((f.properties.code || '').toLowerCase() === q || (f.properties.name || '').toLowerCase().includes(q)) { hit = f; return true; }
+  }));
+  if (hit) {
+    showIdentify(hit);
+    const g = hit.geometry;
+    if (g.type === 'Point') map.setView([g.coordinates[1], g.coordinates[0]], 17);
+    else map.fitBounds(L.geoJSON(hit).getBounds(), { padding: [40, 40] });
+    toast('พบรายการ ' + hit.properties.code, 'search');
+  } else toast('ไม่พบรายการที่ตรงกับคำค้น', 'warn');
+});
+
+/* filters */
+['fAgency', 'fStatus', 'fProblem'].forEach(id => document.getElementById(id).addEventListener('change', applyFilter));
+function applyFilter() {
+  const ag = document.getElementById('fAgency').value;
+  const st = document.getElementById('fStatus').value;
+  const pb = document.getElementById('fProblem').checked;
+  let shown = 0, total = 0;
+  Object.keys(groups).forEach(code => groups[code].eachLayer(l => {
+    const p = l.feature.properties; total++;
+    let ok = true;
+    if (ag && p.owner !== ag) ok = false;
+    if (st && p.confirm !== st) ok = false;
+    if (pb && !(p.condition === 'ต้องซ่อม' || p.status === 'ชำรุด' || p.status === 'ออฟไลน์' || p.confirm === 'conflict' || p.confirm === 'pending')) ok = false;
+    if (l.setStyle) l.setStyle({ opacity: ok ? .9 : .07, fillOpacity: ok ? (GEO[code].kind === 'point' ? 1 : .22) : .03 });
+    if (ok) shown++;
+  }));
+  document.getElementById('filterInfo').textContent =
+    (ag || st || pb) ? `แสดง ${fmt(shown)} จาก ${fmt(total)} รายการที่โหลดไว้` : '';
+  refreshVisible();
+}
+
+/* visible rows */
+function refreshVisible() {
+  const b = map.getBounds(); const rows = [];
+  Object.keys(groups).forEach(code => {
+    if (!map.hasLayer(groups[code])) return;
+    groups[code].eachLayer(l => {
+      const ll = l.getLatLng ? l.getLatLng() : (l.getBounds && l.getBounds().getCenter());
+      if (ll && b.contains(ll) && rows.length < 400) rows.push(l.feature.properties);
+    });
+  });
+  document.getElementById('visCount').textContent = `${fmt(rows.length)} รายการในมุมมอง`;
+  document.getElementById('visRows').innerHTML = rows.slice(0, 12).map(p => {
+    const lay = LAYERS.find(l => l.code === p.layer);
+    const cf = CONFIRM_LABEL[p.confirm] || { t: '—', c: 'badge-outline' };
+    return `<tr><td class="mono">${p.code}</td><td>${p.name || '—'}</td>
+      <td class="small">${lay.code} ${lay.name}</td><td class="small">${p.owner || '—'}</td>
+      <td><span class="badge ${cf.c}">${cf.t}</span></td></tr>`;
+  }).join('') || `<tr><td colspan="5" class="muted center" style="padding:20px">ไม่มีรายการในมุมมองนี้</td></tr>`;
+
+  const byLayer = {};
+  rows.forEach(p => byLayer[p.layer] = (byLayer[p.layer] || 0) + 1);
+  const segs = Object.keys(byLayer).map(c => {
+    const l = LAYERS.find(x => x.code === c);
+    return { label: l.name, value: byLayer[c], color: l.color };
+  }).sort((a, b) => b.value - a.value);
+  document.getElementById('viewSummary').innerHTML = segs.length
+    ? `${barChart(segs.slice(0, 6))}<p class="small muted mt16" style="margin-bottom:0">
+       รวม ${fmt(rows.length)} รายการ · มาตราส่วนปัจจุบันระดับการซูม ${map.getZoom()}</p>`
+    : '<div class="empty">' + icon('map') + '<div>ไม่มีรายการในมุมมองนี้</div></div>';
+}
+map.on('moveend zoomend', () => {
+  refreshVisible();
+  const mpp = 156543.03392 * Math.cos(CENTER[0] * Math.PI / 180) / Math.pow(2, map.getZoom());
+  document.getElementById('scale').textContent = 'มาตราส่วนโดยประมาณ 1:' + fmt(Math.round(mpp * 96 / 0.0254 / 100) * 100);
+});
+refreshVisible();
+
+/* display options */
+document.getElementById('optBoundary').addEventListener('change', e => {
+  groups.L08.eachLayer(l => { if (l.feature.properties.code === 'AB-001') l.setStyle({ weight: e.target.checked ? 2 : 0 }); });
+});
+document.getElementById('optLabel').addEventListener('change', e => {
+  Object.keys(groups).forEach(code => groups[code].eachLayer(l => {
+    if (e.target.checked) l.bindTooltip(l.feature.properties.code, { permanent: true, direction: 'top', className: 'xsmall', opacity: .85 });
+    else l.unbindTooltip();
+  }));
+  if (!e.target.checked) groups.L01.eachLayer(l => l.bindTooltip(l.feature.properties.name, { sticky: true }));
+});
+document.getElementById('optCluster').addEventListener('change', () =>
+  toast('ตัวอย่างหน้าจอ — ระบบจริงใช้การรวมกลุ่มจุดฝั่งเซิร์ฟเวอร์เมื่อระดับการซูมต่ำกว่า 14', 'info'));
+
+/* ทาสีชั้นข้อมูลใหม่เมื่อสลับธีมสว่าง/มืด */
+new MutationObserver(() => {
+  Object.keys(groups).forEach(code => groups[code].eachLayer(l => {
+    if (l.setRadius) l.setStyle({ fillColor: ptColor()[code], color: cv('--surface-1') });
+    else if (layerStyle[code]) l.setStyle(layerStyle[code](l.feature));
+  }));
+}).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+
+/* tile fallback note */
+setTimeout(() => {
+  if (!document.querySelector('.leaflet-tile-loaded'))
+    document.getElementById('mapfallback').insertAdjacentHTML('beforeend',
+      `<div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center;
+        background:var(--surface-1);border:1px solid var(--line);border-radius:10px;padding:10px 14px;
+        font-size:.78rem;color:var(--ink-3);max-width:260px">แผนที่ฐานออนไลน์โหลดไม่สำเร็จ —
+        ชั้นข้อมูลยังแสดงผลได้ตามปกติ</div>`);
+}, 3500);
+</script>
+</body>
+</html>

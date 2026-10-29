@@ -1,0 +1,406 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>บันทึก/แก้ไขข้อมูล — GeoCore GIS</title>
+<link rel="icon" href="assets/img/favicon.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link rel="stylesheet" href="assets/css/app.css">
+<style>
+  .pickmap { height: 320px; border-radius: var(--r-md); overflow: hidden; border: 1px solid var(--line); }
+  .leaflet-container { font-family: var(--font); background: var(--surface-2); }
+  .photo { position: relative; aspect-ratio: 4/3; border-radius: var(--r-sm); overflow: hidden;
+           border: 1px solid var(--line); display: grid; place-items: center;
+           background: var(--surface-2); color: var(--ink-3); font-size: .72rem; text-align: center; padding: 6px; }
+  .photo .del { position: absolute; top: 4px; right: 4px; }
+</style>
+</head>
+<body>
+<main class="content"><div class="content-inner" id="root"></div></main>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="assets/js/data.js"></script>
+<script src="assets/js/geodata.js"></script>
+<script src="assets/js/shell.js"></script>
+<script>
+renderShell('data-entry.html');
+const root = document.getElementById('root');
+
+root.innerHTML = `
+${pageHead({
+  crumbs: ['<a href="index.html">หน้าแรก</a>', '<a href="attribute-table.html">ตารางข้อมูล</a>', 'บันทึกข้อมูล'],
+  title: 'บันทึกรายการใหม่',
+  badge: badge('ร่าง · ยังไม่ส่งตรวจ', 'outline'),
+  sub: 'ฟอร์มใช้ชุดฟิลด์มาตรฐานเดียวกันทุกชั้นข้อมูล ระบบตรวจค่าก่อนบันทึกและสร้างรหัสรายการให้อัตโนมัติ',
+  actions: `<button class="btn" id="btnCancel">ยกเลิก</button>
+            <button class="btn" id="btnDraft">${icon('save')} บันทึกร่าง</button>
+            <button class="btn btn-primary" id="btnSubmit">${icon('check')} ส่งเข้าคิวตรวจสอบ</button>`
+})}
+
+<div class="ro-banner">${icon('warn')}<span>สิทธิ์ <b>ผู้อ่านข้อมูล</b> บันทึกข้อมูลไม่ได้ — หน้านี้แสดงเพื่อดูโครงสร้างฟอร์มเท่านั้น</span></div>
+
+<div class="grid g-2-1">
+  <div class="stack">
+
+    <div class="card">
+      <div class="card-head"><h2>1 · ชั้นข้อมูลและรหัสรายการ</h2></div>
+      <div class="card-body">
+        <div class="inline-group">
+          <div class="field">
+            <label for="fLayer">ชั้นข้อมูล <span class="req">*</span></label>
+            <select id="fLayer"></select>
+            <div class="hint">เปลี่ยนชั้นข้อมูลแล้วฟอร์มเฉพาะส่วนจะเปลี่ยนตาม</div>
+          </div>
+          <div class="field">
+            <label for="fCode">รหัสรายการ <span class="req">*</span></label>
+            <input type="text" id="fCode" value="SL-00743" readonly>
+            <div class="hint">สร้างอัตโนมัติ ตรวจความไม่ซ้ำด้วยข้อจำกัด UNIQUE ในฐานข้อมูล</div>
+          </div>
+        </div>
+        <div class="field">
+          <label for="fName">ชื่อรายการ</label>
+          <input type="text" id="fName" placeholder="เช่น จุดไฟส่องสว่างหน้าศาลาประชาคม">
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h2>2 · ข้อมูลเฉพาะชั้นข้อมูล</h2><span class="spacer"></span>
+        <span class="hint" id="specHint"></span></div>
+      <div class="card-body" id="specFields"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h2>3 · การกำกับข้อมูลและหลักฐานอ้างอิง</h2><span class="spacer"></span>
+        <span class="badge badge-warning">ฟิลด์บังคับตามขอบเขตงาน</span></div>
+      <div class="card-body">
+        <div class="inline-group">
+          <div class="field">
+            <label for="fOwner">เจ้าของทรัพย์สิน <span class="req">*</span></label>
+            <select id="fOwner"></select>
+          </div>
+          <div class="field">
+            <label for="fMaint">ผู้บำรุงรักษา <span class="req">*</span></label>
+            <select id="fMaint"></select>
+          </div>
+        </div>
+        <div class="field">
+          <label for="fConfirm">สถานะการยืนยันผู้รับผิดชอบ <span class="req">*</span></label>
+          <select id="fConfirm">
+            <option value="confirmed">ยืนยันแล้ว — มีหลักฐานจากหน่วยงาน</option>
+            <option value="pending">รอยืนยัน — ยังประสานไม่แล้วเสร็จ</option>
+            <option value="conflict">ข้อมูลขัดแย้ง — หน่วยงานให้ข้อมูลไม่ตรงกัน</option>
+          </select>
+          <div class="hint">หากเลือก "ยืนยันแล้ว" ต้องระบุหลักฐานอ้างอิงที่ตรวจสอบได้
+            ระบบไม่ยอมรับการสรุปจากการสังเกตภาคสนามเพียงอย่างเดียว</div>
+        </div>
+        <div class="inline-group">
+          <div class="field">
+            <label for="fSrcType">ประเภทแหล่งข้อมูล <span class="req">*</span></label>
+            <select id="fSrcType">
+              <option value="field_survey">สำรวจภาคสนาม</option>
+              <option value="aerial">ดิจิไทซ์จากภาพถ่ายทางอากาศ</option>
+              <option value="agency_doc">เอกสาร/ทะเบียนจากหน่วยงาน</option>
+              <option value="citizen_report">แจ้งเหตุจากประชาชน</option>
+              <option value="legacy">ชั้นข้อมูลเดิมขององค์กร</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="fDate">วันที่สำรวจ/ข้อมูลมีผล <span class="req">*</span></label>
+            <input type="date" id="fDate" value="2026-10-29">
+            <div class="err" id="eDate" hidden>${icon('warn')} วันที่สำรวจต้องไม่เป็นวันในอนาคต (กฎ QC-10)</div>
+          </div>
+        </div>
+        <div class="field">
+          <label for="fSrc">หลักฐานอ้างอิง <span class="req">*</span></label>
+          <input type="text" id="fSrc" placeholder="เลขที่หนังสือ ชื่อไฟล์ หรือรายละเอียดหลักฐาน">
+          <div class="err" id="eSrc" hidden>${icon('warn')} ต้องระบุหลักฐานอ้างอิง (กฎ QC-01 · ฟิลด์บังคับ)</div>
+        </div>
+        <div class="field" style="margin-bottom:0">
+          <label for="fDesc">คำอธิบายข้อมูล</label>
+          <textarea id="fDesc" placeholder="บันทึกสิ่งที่พบ ข้อสังเกต หรือข้อจำกัดในการเข้าถึงพื้นที่"></textarea>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h2>4 · ชั้นความลับและการเผยแพร่</h2></div>
+      <div class="card-body">
+        <div class="inline-group">
+          <div class="field">
+            <label for="fSens">ชั้นความลับ <span class="req">*</span></label>
+            <select id="fSens">
+              <option value="public">Public — เผยแพร่ได้</option>
+              <option value="internal" selected>Internal — ใช้ภายในองค์กร</option>
+              <option value="confidential">Confidential — เฉพาะผู้ได้รับสิทธิ์</option>
+              <option value="restricted">Restricted — เฉพาะรายชื่อที่กำหนด</option>
+            </select>
+          </div>
+          <div class="field">
+            <label class="flabel">อยู่ในชุดเผยแพร่สาธารณะ</label>
+            <label class="check" style="margin-top:6px">
+              <span class="switch"><input type="checkbox" id="fPublic"><span class="track"></span><span class="knob"></span></span>
+              <span id="pubLabel">ไม่รวมในชุดเผยแพร่</span></label>
+            <div class="hint" id="pubHint"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="stack">
+    <div class="card">
+      <div class="card-head"><h2>ตำแหน่งบนแผนที่ <span class="req">*</span></h2></div>
+      <div class="card-body">
+        <div class="pickmap" id="pick"></div>
+        <div class="inline-group mt16">
+          <div class="field" style="margin-bottom:8px"><label for="fLat">ละติจูด</label><input type="text" id="fLat" readonly></div>
+          <div class="field" style="margin-bottom:8px"><label for="fLng">ลองจิจูด</label><input type="text" id="fLng" readonly></div>
+        </div>
+        <div class="row row-tight">
+          <button class="btn btn-sm" id="useGps">${icon('target')} ใช้พิกัดจาก GPS</button>
+          <button class="btn btn-sm btn-ghost" id="snapRoad">ยึดกับแนวถนนที่ใกล้ที่สุด</button>
+        </div>
+        <dl class="kv mt16">
+          <dt>ระบบพิกัด</dt><dd>EPSG:4326 (WGS 84)</dd>
+          <dt>ความแม่นยำ</dt><dd id="acc">1.2 ม. <span class="muted xsmall">(เป้าหมาย ≤ 1.5 ม.)</span></dd>
+          <dt>ถนนที่ใกล้สุด</dt><dd id="nearRoad">—</dd>
+          <dt>อยู่ในแนวเขต</dt><dd><span class="badge badge-good">${icon('check')} อยู่ในพื้นที่ศึกษา</span></dd>
+        </dl>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h2>ภาพถ่ายและไฟล์แนบ</h2><span class="spacer"></span>
+        <span class="hint" id="photoCount">2 ไฟล์</span></div>
+      <div class="card-body">
+        <div class="grid" style="grid-template-columns:repeat(3,1fr);gap:8px" id="photos"></div>
+        <button class="btn btn-sm btn-block mt16" id="addPhoto">${icon('upload')} เพิ่มภาพถ่าย (สูงสุด 15 MB/ไฟล์)</button>
+        <p class="hint" style="margin-top:8px">ภาพถ่ายบันทึกพิกัดและเวลาถ่ายจาก EXIF อัตโนมัติ
+          ไฟล์จัดเก็บบน object storage และอ้างอิงด้วย metadata ในฐานข้อมูล</p>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h2>ผลการตรวจค่าก่อนบันทึก</h2></div>
+      <div class="card-body" id="validate"></div>
+      <div class="card-foot xsmall">ตรวจด้วยกฎชุดเดียวกับการตรวจคุณภาพข้อมูล (dry-run ผ่าน
+        <code>POST /features/validate</code>)</div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h2>ขั้นตอนการทำงาน</h2></div>
+      <div class="card-body">
+        <ul class="tl" style="margin:0">
+          <li class="now"><div class="tt">ร่าง</div><div class="td">ผู้ป้อนข้อมูลบันทึกและแก้ไขได้</div></li>
+          <li><div class="tt">ส่งตรวจสอบ</div><div class="td">ล็อกไม่ให้แก้ไขระหว่างรอตรวจ</div></li>
+          <li><div class="tt">อนุมัติ / ตีกลับ</div><div class="td">ผู้มีสิทธิ์ทั้งสองกลุ่มขึ้นไป</div></li>
+          <li><div class="tt">เข้าชุดข้อมูลหลัก</div><div class="td">เข้าสู่รอบตรวจคุณภาพและการเผยแพร่</div></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+`;
+
+/* layer select */
+document.getElementById('fLayer').innerHTML = LAYERS.filter(l => l.isNew)
+  .map(l => `<option value="${l.code}" ${l.code === 'L02' ? 'selected' : ''}>${l.code} · ${l.name}</option>`).join('');
+const agOpts = AGENCIES.map(a => `<option>${a.abbr} — ${a.name}</option>`).join('');
+document.getElementById('fOwner').innerHTML = agOpts;
+document.getElementById('fMaint').innerHTML = agOpts;
+
+/* ไฟล์แนบ — ประกาศไว้ก่อน เพราะการตรวจค่าเรียกใช้ตั้งแต่ตอนวางหมุดบนแผนที่ */
+let photos = ['IMG_2411.jpg · มุมมองด้านหน้า', 'IMG_2412.jpg · ป้ายรหัสอุปกรณ์'];
+
+/* layer-specific fields */
+const SPEC = {
+  L01: [['ชั้นทาง *', 'select', ['ทางหลวง', 'ถนนสายหลัก', 'ถนนสายรอง', 'ซอย', 'ถนนเข้าพื้นที่เกษตร']],
+        ['ผิวทาง *', 'select', ['คอนกรีตเสริมเหล็ก', 'ลาดยางแอสฟัลต์', 'ลูกรัง', 'บล็อกปูทาง', 'ดินลูกรังบดอัด']],
+        ['สภาพจากการสำรวจ', 'select', ['ดี', 'พอใช้', 'ชำรุดบางช่วง', 'ต้องซ่อม']],
+        ['ความกว้างผิวทาง (ม.)', 'number', '5.0'],
+        ['คำบรรยายจุดเริ่มต้น', 'text', 'เช่น สามแยกหน้าวัด'],
+        ['คำบรรยายจุดสิ้นสุด', 'text', 'เช่น สะพานข้ามคลอง'],
+        ['มีรางระบายน้ำสองข้างทาง', 'check', '']],
+  L02: [['ประเภทอุปกรณ์ *', 'select', ['โคมไฟ LED', 'โคมไฟ HPS', 'โคมไฟโซลาร์เซลล์', 'โคมไฟฟลูออเรสเซนต์']],
+        ['กำลังไฟ (วัตต์)', 'number', '100'],
+        ['ประเภทเสา', 'select', ['เสาคอนกรีต', 'เสาเหล็กชุบกัลวาไนซ์', 'เสาสูงกิ่งคู่', 'ติดตั้งบนเสาไฟฟ้า']],
+        ['จำนวนกิ่งโคม', 'number', '1'],
+        ['สถานะใช้งาน *', 'select', ['ใช้งานได้', 'ชำรุด', 'รอซ่อม', 'ถอดออกแล้ว']],
+        ['ถนนที่ติดตั้ง', 'select', ['RD-0101 ถนนสายหลักกลางตำบล', 'RD-0102 ถนนเลียบคลองส่งน้ำ', 'RD-0117 ซอยชุมชนร่วมใจ 4']],
+        ['แหล่งจ่ายไฟ', 'select', ['ระบบจำหน่ายการไฟฟ้า', 'โซลาร์เซลล์', 'ผสม']]],
+  L03: [['ประเภทกล้อง *', 'select', ['กล้องมุมคงที่ (Fixed)', 'กล้องหมุนส่าย (PTZ)', 'กล้องโดม (Dome)', 'กล้องอ่านป้ายทะเบียน']],
+        ['สถานะใช้งาน *', 'select', ['ใช้งานได้', 'ออฟไลน์', 'ชำรุด', 'ถอดออกแล้ว']],
+        ['ทิศทางครอบคลุม (องศา)', 'number', '135'],
+        ['ระยะครอบคลุมโดยประมาณ (ม.)', 'number', '45'],
+        ['ความสูงจุดติดตั้ง (ม.)', 'number', '6.5'],
+        ['ปีที่ติดตั้ง (พ.ศ.)', 'number', '2566']],
+  L04: [['ประเภทโครงสร้าง *', 'select', ['คอนกรีตเสริมเหล็กแบบพื้น', 'คอนกรีตเสริมเหล็กแบบคาน', 'ท่อเหลี่ยม (Box Culvert)', 'โครงเหล็ก', 'ไม้']],
+        ['ความยาวสะพาน (ม.)', 'number', '18'],
+        ['ความกว้างสะพาน (ม.)', 'number', '7'],
+        ['น้ำหนักบรรทุกจำกัดตามป้าย (ตัน)', 'number', '21'],
+        ['สภาพจากการสำรวจเบื้องต้น', 'select', ['ดี', 'พอใช้', 'ต้องซ่อม', 'เสี่ยงต่อการใช้งาน']],
+        ['สิ่งที่สะพานข้าม', 'text', 'เช่น คลองส่งน้ำสายที่ 2']],
+  L05: [['ประเภทสิ่งอำนวยความสะดวก *', 'select', ['จุดรับน้ำดิบ', 'โรงกรองน้ำ', 'สถานีสูบน้ำ', 'ถังเก็บน้ำ', 'จุดจ่ายน้ำ', 'บ่อบาดาล']],
+        ['ความจุ/กำลังผลิต (ลบ.ม.)', 'number', '120'],
+        ['สถานะ *', 'select', ['ใช้งานได้', 'หยุดใช้งาน', 'อยู่ระหว่างซ่อม', 'เลิกใช้แล้ว']],
+        ['พื้นที่บริการ (หมู่บ้าน)', 'text', 'เช่น หมู่ 1, 2, 5'],
+        ['ครัวเรือนที่ได้รับบริการ', 'number', '248']],
+  L06: [['ประเภทปัญหา *', 'select', ['น้ำท่วมขัง', 'น้ำเสียระบายลงแหล่งน้ำ', 'ทางระบายน้ำอุดตัน', 'กลิ่นเหม็น', 'ตลิ่งทรุด']],
+        ['ระดับความรุนแรง *', 'select', ['ต่ำ', 'ปานกลาง', 'สูง', 'วิกฤต']],
+        ['ความถี่ที่เกิด', 'select', ['ทุกครั้งที่ฝนตก', 'ตามฤดูกาล', 'เป็นครั้งคราว', 'เกิดตลอดเวลา']],
+        ['ครัวเรือนที่ได้รับผลกระทบ', 'number', '34'],
+        ['ลำดับการแก้ไขที่เสนอ', 'number', '4']],
+  L07: [['ประเภทพื้นที่ *', 'select', ['สวนสาธารณะ', 'ลานกีฬา', 'ลานวัด', 'ตลาดชุมชน', 'ศูนย์การเรียนรู้', 'พื้นที่สีเขียว']],
+        ['การใช้ประโยชน์ปัจจุบัน', 'text', 'เช่น ลานกีฬาและตลาดนัดวันเสาร์'],
+        ['ผู้ดูแลพื้นที่', 'text', 'เช่น คณะกรรมการหมู่บ้าน หมู่ 3'],
+        ['มีสิ่งอำนวยความสะดวกทุกช่วงวัย', 'check', ''],
+        ['ศักยภาพเชื่อมโยงกิจกรรมชุมชน', 'text', 'เช่น เชื่อมเส้นทางปั่นจักรยานเลียบคลอง']],
+  L08: [['ลักษณะความคลาดเคลื่อน *', 'select', ['พื้นที่ซ้อนทับ', 'พื้นที่ขาด', 'แนวเขตไม่ตรงกัน']],
+        ['แนวเขตตามเอกสารอ้างอิง *', 'select', ['ประกาศกระทรวงมหาดไทย', 'แผนที่ภาพถ่ายทางอากาศ', 'แผนที่ระวาง']],
+        ['แนวเขตจัดเก็บที่ใช้งานจริง *', 'select', ['แนวเขตจัดเก็บภาษี', 'แนวเขตให้บริการสาธารณูปโภค']],
+        ['แปลงที่ดินที่ได้รับผลกระทบ', 'number', '142'],
+        ['สิ่งปลูกสร้างที่ได้รับผลกระทบ', 'number', '96'],
+        ['สถานะการยุติ', 'select', ['ยังขัดแย้ง', 'อยู่ระหว่างประสาน', 'ยุติแล้ว']]]
+};
+
+function paintSpec() {
+  const code = document.getElementById('fLayer').value;
+  const lay = LAYERS.find(l => l.code === code);
+  document.getElementById('specHint').textContent = `${lay.table.split(' ')[0]} · ${lay.geom}`;
+  document.getElementById('specFields').innerHTML = (SPEC[code] || []).map((f, i) => {
+    const id = 'sp' + i;
+    if (f[1] === 'select') return `<div class="field"><label for="${id}">${f[0]}</label>
+      <select id="${id}">${f[2].map(o => `<option>${o}</option>`).join('')}</select></div>`;
+    if (f[1] === 'check') return `<label class="check"><input type="checkbox" id="${id}"><span>${f[0]}</span></label>`;
+    return `<div class="field"><label for="${id}">${f[0]}</label>
+      <input type="${f[1]}" id="${id}" placeholder="${f[2]}" ${f[1] === 'number' ? `value="${f[2]}"` : ''}></div>`;
+  }).join('');
+  /* ชั้นข้อมูลอ่อนไหวบังคับชั้นความลับ */
+  const sens = document.getElementById('fSens'), pub = document.getElementById('fPublic');
+  if (code === 'L03') {
+    sens.value = 'confidential'; sens.disabled = true; pub.checked = false; pub.disabled = true;
+    document.getElementById('pubHint').innerHTML =
+      '<b style="color:var(--critical)">ชั้นข้อมูล CCTV เป็นข้อมูลอ่อนไหว</b> ระบบบังคับตัดออกจากชุดเผยแพร่ทุกรุ่น และไม่จัดเก็บรหัสผ่านหรือข้อมูลเชื่อมต่อ';
+  } else {
+    sens.disabled = false; pub.disabled = false;
+    document.getElementById('pubHint').textContent = 'ฟิลด์นี้กำหนดว่ารายการจะปรากฏในชุดข้อมูลเปิดหรือไม่';
+  }
+  updatePubLabel();
+  validate();
+}
+document.getElementById('fLayer').addEventListener('change', paintSpec);
+
+function updatePubLabel() {
+  const on = document.getElementById('fPublic').checked;
+  document.getElementById('pubLabel').textContent = on ? 'รวมในชุดเผยแพร่สาธารณะ' : 'ไม่รวมในชุดเผยแพร่';
+}
+document.getElementById('fPublic').addEventListener('change', updatePubLabel);
+
+/* mini map picker */
+const pm = L.map('pick', { zoomControl: true, attributionControl: false }).setView(CENTER, 14);
+L.tileLayer('https://services.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}',
+  { maxZoom: 16 }).addTo(pm);
+function cvp(n) { return getComputedStyle(document.documentElement).getPropertyValue(n).trim(); }
+L.geoJSON({ type: 'FeatureCollection', features: ROAD_FEATS },
+  { style: { color: cvp('--s1'), weight: 2, opacity: .55 } }).addTo(pm);
+L.geoJSON(STUDY_AREA, { style: { color: cvp('--s8'), weight: 2, dashArray: '6 4', fill: false } }).addTo(pm);
+let marker = L.marker(CENTER, { draggable: true }).addTo(pm);
+function setPos(ll) {
+  document.getElementById('fLat').value = ll.lat.toFixed(6);
+  document.getElementById('fLng').value = ll.lng.toFixed(6);
+  let best = null, bd = 1e9;
+  ROAD_FEATS.forEach(f => f.geometry.coordinates.forEach(c => {
+    const d = Math.hypot((c[1] - ll.lat) * 110574, (c[0] - ll.lng) * 108550);
+    if (d < bd) { bd = d; best = f; }
+  }));
+  document.getElementById('nearRoad').innerHTML = best
+    ? `${best.properties.code} ${best.properties.name} <span class="muted xsmall">(ห่าง ${bd.toFixed(1)} ม.)</span>
+       ${bd > 25 ? '<br><span class="badge badge-warning">เกิน 25 ม. — จะถูกทำเครื่องหมายโดยกฎ QC-07</span>' : ''}`
+    : '—';
+  validate();
+}
+setPos(L.latLng(CENTER[0], CENTER[1]));
+marker.on('dragend', () => setPos(marker.getLatLng()));
+pm.on('click', e => { marker.setLatLng(e.latlng); setPos(e.latlng); });
+document.getElementById('useGps').onclick = () => {
+  const ll = L.latLng(CENTER[0] + (Math.random() - .5) * .01, CENTER[1] + (Math.random() - .5) * .01);
+  marker.setLatLng(ll); pm.setView(ll, 16); setPos(ll);
+  document.getElementById('acc').innerHTML = (0.8 + Math.random()).toFixed(1) + ' ม. <span class="muted xsmall">(RTK GNSS)</span>';
+  toast('รับพิกัดจากอุปกรณ์แล้ว', 'target');
+};
+document.getElementById('snapRoad').onclick = () => toast('ยึดตำแหน่งกับแนวถนนที่ใกล้ที่สุดด้วย ST_ClosestPoint', 'target');
+
+/* photos */
+function paintPhotos() {
+  document.getElementById('photos').innerHTML = photos.map((p, i) => `
+    <div class="photo">${icon('file')}<span style="display:block;margin-top:4px">${p}</span>
+      <button class="iconbtn del" data-rm="${i}" data-need="write" aria-label="ลบ">${icon('x')}</button></div>`).join('')
+    || '<div class="empty" style="grid-column:1/-1;padding:20px">ยังไม่มีภาพถ่ายแนบ</div>';
+  document.getElementById('photoCount').textContent = photos.length + ' ไฟล์';
+  document.querySelectorAll('[data-rm]').forEach(b => b.onclick = () => { photos.splice(+b.dataset.rm, 1); paintPhotos(); validate(); });
+}
+document.getElementById('addPhoto').onclick = () => {
+  if (currentRole() === 'viewer') return toast('สิทธิ์ผู้อ่านข้อมูลแนบไฟล์ไม่ได้', 'warn');
+  photos.push('IMG_' + (2413 + photos.length) + '.jpg · ภาพถ่ายภาคสนาม'); paintPhotos(); validate();
+};
+paintPhotos();
+
+/* validation */
+function validate() {
+  const items = [];
+  const src = document.getElementById('fSrc').value.trim();
+  const date = document.getElementById('fDate').value;
+  const confirm = document.getElementById('fConfirm').value;
+  items.push({ ok: !!document.getElementById('fCode').value, t: 'รหัสรายการไม่ซ้ำ (QC-02)' });
+  items.push({ ok: !!document.getElementById('fLat').value, t: 'มีพิกัดและอยู่ในแนวเขตพื้นที่ศึกษา (QC-04)' });
+  items.push({ ok: !!src, t: 'ระบุหลักฐานอ้างอิง (QC-01)' });
+  items.push({ ok: !!date && date <= '2026-10-29', t: 'วันที่สำรวจไม่เป็นอนาคต (QC-10)' });
+  items.push({ ok: confirm !== 'confirmed' || !!src, t: 'สถานะ "ยืนยันแล้ว" ต้องมีหลักฐาน (QC-11)' });
+  items.push({ ok: photos.length > 0, t: 'แนบภาพถ่ายประกอบอย่างน้อย 1 ไฟล์', warn: true });
+
+  document.getElementById('eSrc').hidden = !!src;
+  document.getElementById('eDate').hidden = !(date && date > '2026-10-29');
+  document.getElementById('fSrc').classList.toggle('invalid', !src);
+
+  const bad = items.filter(i => !i.ok && !i.warn).length;
+  const warn = items.filter(i => !i.ok && i.warn).length;
+  document.getElementById('validate').innerHTML =
+    `<div class="notice ${bad ? 'notice-crit' : warn ? 'notice-warn' : 'notice-good'}" style="margin-bottom:12px">
+      ${icon(bad ? 'warn' : warn ? 'info' : 'check')}
+      <div><strong>${bad ? `ยังมีข้อผิดพลาด ${bad} รายการ` : warn ? `ผ่านเกณฑ์ขั้นต่ำ มีข้อเตือน ${warn} รายการ` : 'ผ่านการตรวจทุกข้อ'}</strong>
+      ${bad ? 'ส่งเข้าคิวตรวจสอบไม่ได้จนกว่าจะแก้ไขครบ' : 'บันทึกและส่งเข้าคิวตรวจสอบได้'}</div></div>` +
+    items.map(i => `<div class="row row-tight small" style="margin-bottom:5px">
+      <span style="color:${i.ok ? 'var(--good)' : i.warn ? 'var(--warning)' : 'var(--critical)'};display:flex">
+        ${icon(i.ok ? 'check' : 'warn')}</span><span>${i.t}</span></div>`).join('');
+}
+['fSrc', 'fDate', 'fConfirm'].forEach(id => document.getElementById(id).addEventListener('input', validate));
+paintSpec();
+
+/* actions */
+document.getElementById('btnCancel').onclick = () => history.length > 1 ? history.back() : location.href = 'attribute-table.html';
+document.getElementById('btnDraft').onclick = () => {
+  if (currentRole() === 'viewer') return toast('สิทธิ์ผู้อ่านข้อมูลบันทึกไม่ได้', 'warn');
+  toast('บันทึกร่างแล้ว — รายการอยู่ในสถานะ "ร่าง" และแก้ไขต่อได้', 'save');
+};
+document.getElementById('btnSubmit').onclick = () => {
+  if (currentRole() === 'viewer') return toast('สิทธิ์ผู้อ่านข้อมูลส่งตรวจไม่ได้', 'warn');
+  if (!document.getElementById('fSrc').value.trim()) { validate(); return toast('กรอกหลักฐานอ้างอิงก่อนส่งตรวจสอบ', 'warn'); }
+  modal('ส่งเข้าคิวตรวจสอบ',
+    `<p class="small dim">รายการ <b>${document.getElementById('fCode').value}</b> จะถูกล็อกไม่ให้แก้ไขระหว่างรอตรวจ
+     และส่งให้ผู้มีสิทธิ์ตรวจสอบของชั้นข้อมูลนี้</p>
+     <div class="field"><label>ผู้ตรวจสอบ</label><select><option>ปิยะนุช ส. (ผู้ใช้งานทั้งสองสิทธิ์)</option>
+       <option>สมชาย ว. (ผู้ดูแลระบบ)</option></select></div>
+     <div class="field" style="margin-bottom:0"><label>บันทึกถึงผู้ตรวจ</label>
+       <textarea placeholder="ระบุข้อสังเกตหรือข้อจำกัดในการสำรวจ"></textarea></div>`,
+    `<button class="btn" data-close>ยกเลิก</button>
+     <button class="btn btn-primary" data-close onclick="toast('ส่งเข้าคิวตรวจสอบแล้ว — ติดตามสถานะได้ที่หน้าคิวตรวจสอบ','check')">ส่งตรวจสอบ</button>`);
+};
+</script>
+</body>
+</html>

@@ -1,0 +1,328 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ส่งออกและเผยแพร่ — GeoCore GIS</title>
+<link rel="icon" href="assets/img/favicon.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/app.css">
+<style>
+  .fmt { display:flex; gap:11px; align-items:flex-start; padding:12px 13px; border:1px solid var(--line);
+         border-radius: var(--r-md); margin-bottom:9px; cursor:pointer; background: var(--surface-1); }
+  .fmt:has(input:checked) { border-color: var(--accent); background: var(--accent-wash); }
+  .fmt input { margin-top:3px; accent-color: var(--b500); width:16px; height:16px; flex:0 0 16px; }
+  .fmt .n { font-weight:600; font-size:.86rem; }
+  .fmt .d { font-size:.76rem; color: var(--ink-2); }
+  .tree { font-family: var(--mono); font-size:.76rem; line-height:1.85; color: var(--ink-2); }
+  .tree b { color: var(--ink-1); }
+</style>
+</head>
+<body>
+<main class="content"><div class="content-inner" id="root"></div></main>
+
+<script src="assets/js/data.js"></script>
+<script src="assets/js/shell.js"></script>
+<script>
+renderShell('export.html');
+const root = document.getElementById('root');
+
+root.innerHTML = `
+${pageHead({
+  crumbs: ['<a href="index.html">หน้าแรก</a>', 'ส่งออกและเผยแพร่'],
+  title: 'ส่งออกและเผยแพร่ชุดข้อมูล',
+  sub: 'จัดชุดส่งมอบตามรูปแบบที่กำหนด พร้อมบัญชีไฟล์ รุ่นข้อมูล และชุดเผยแพร่ที่ตัดข้อมูลอ่อนไหวออก',
+  actions: `<button class="btn" id="btnJobs">${icon('history')} ประวัติการส่งออก</button>
+            <button class="btn btn-primary" data-need="read-all" id="btnMake">${icon('download')} สร้างชุดส่งมอบ</button>`
+})}
+
+<div data-only="editor" class="notice notice-warn mb16">${icon('warn')}<div>
+  <strong>สิทธิ์ผู้ป้อนข้อมูลส่งออกทั้งชั้นข้อมูลไม่ได้</strong>
+  กลุ่มนี้ดาวน์โหลดได้เฉพาะรายการที่ตนบันทึกเองเพื่อตรวจทาน
+  การส่งออกทั้งชุดและการเผยแพร่สงวนไว้สำหรับกลุ่มผู้ใช้งานทั้งสองสิทธิ์ขึ้นไป</div></div>
+
+<div class="tabs" data-tabs>
+  <button data-tab="a" aria-selected="true">สร้างชุดส่งมอบ</button>
+  <button data-tab="b" aria-selected="false">ชุดเผยแพร่สาธารณะ</button>
+  <button data-tab="c" aria-selected="false">บัญชีไฟล์และรุ่นข้อมูล</button>
+  <button data-tab="d" aria-selected="false">ประวัติงานส่งออก</button>
+</div>
+
+<div class="tabpanel" data-panel="a">
+  <div class="grid g-2-1">
+    <div class="card">
+      <div class="card-head"><h2>รูปแบบไฟล์ที่ส่งมอบ</h2><span class="spacer"></span>
+        <span class="hint">เลือกได้หลายรายการ — ระบบรวมเป็นชุดเดียว</span></div>
+      <div class="card-body">
+        <div id="fmts"></div>
+        <hr>
+        <div class="inline-group">
+          <div class="field"><label>ชั้นข้อมูลที่รวมในชุด</label>
+            <select><option>ทุกชั้นข้อมูล (10 ชั้น)</option><option>เฉพาะชั้นข้อมูลใหม่ (8 ชั้น)</option>
+              <option>เลือกเอง…</option></select></div>
+          <div class="field"><label>สถานะรายการที่รวม</label>
+            <select><option>เฉพาะรายการที่อนุมัติแล้ว</option><option>อนุมัติแล้ว + รอตรวจสอบ</option>
+              <option>ทุกสถานะ (สำหรับงานภายใน)</option></select></div>
+        </div>
+        <div class="inline-group">
+          <div class="field"><label>ระบบพิกัดของไฟล์ส่งออก</label>
+            <select><option>EPSG:4326 — WGS 84 (เหมือนฐานข้อมูล)</option>
+              <option>EPSG:32647 — UTM Zone 47N</option><option>EPSG:24047 — Indian 1975 UTM 47N</option></select></div>
+          <div class="field"><label>การเข้ารหัสอักขระของตาราง</label>
+            <select><option>UTF-8 with BOM (เปิดภาษาไทยใน Excel ได้)</option><option>UTF-8</option></select></div>
+        </div>
+        <label class="check"><input type="checkbox" checked><span>ใช้พาธสัมพัทธ์ในโครงการ QGIS เพื่อให้ย้ายเครื่องแล้วเปิดได้</span></label>
+        <label class="check"><input type="checkbox" checked><span>แนบพจนานุกรมข้อมูล Metadata และรูปแบบสัญลักษณ์</span></label>
+        <label class="check"><input type="checkbox" checked><span>แนบคู่มือการใช้งานและบัญชีไฟล์ (manifest)</span></label>
+        <label class="check"><input type="checkbox"><span>ตรวจคุณภาพข้อมูลก่อนสร้างชุด และยกเลิกหากพบข้อค้นพบระดับวิกฤต</span></label>
+      </div>
+      <div class="card-foot row">
+        <span class="small">ประมาณขนาดชุดข้อมูล <b id="sz">— MB</b></span>
+        <span style="flex:1"></span>
+        <button class="btn btn-primary" data-need="read-all" id="btnGo">${icon('download')} สร้างชุดส่งมอบ</button>
+      </div>
+    </div>
+
+    <div class="stack">
+      <div class="card">
+        <div class="card-head"><h2>โครงสร้างโฟลเดอร์ที่ส่งมอบ</h2></div>
+        <div class="card-body">
+          <div class="tree">
+<b>GIS_Dataset_v2026.10/</b><br>
+&nbsp;├─ <b>01_database/</b><br>
+&nbsp;│&nbsp;&nbsp;├─ gis_dataset.gpkg <span class="muted">(ทุกชั้นข้อมูล)</span><br>
+&nbsp;│&nbsp;&nbsp;└─ gis_dataset_public.gpkg <span class="muted">(ชุดเผยแพร่)</span><br>
+&nbsp;├─ <b>02_qgis_project/</b><br>
+&nbsp;│&nbsp;&nbsp;├─ project.qgz <span class="muted">(พาธสัมพัทธ์)</span><br>
+&nbsp;│&nbsp;&nbsp;└─ styles/ <span class="muted">(*.qml, *.sld)</span><br>
+&nbsp;├─ <b>03_tables/</b> <span class="muted">(XLSX + CSV รายชั้นข้อมูล)</span><br>
+&nbsp;├─ <b>04_maps_pdf/</b> <span class="muted">(แผนที่ภาพรวมและรายชั้นข้อมูล A3)</span><br>
+&nbsp;├─ <b>05_metadata/</b><br>
+&nbsp;│&nbsp;&nbsp;├─ data_dictionary.xlsx<br>
+&nbsp;│&nbsp;&nbsp;└─ metadata_iso19115.xml<br>
+&nbsp;├─ <b>06_photos/</b> <span class="muted">(ภาพถ่ายภาคสนามจัดตามรหัสรายการ)</span><br>
+&nbsp;├─ <b>07_reports/</b> <span class="muted">(ผลตรวจคุณภาพ · บัญชีข้อจำกัด)</span><br>
+&nbsp;├─ <b>08_manual/</b> <span class="muted">(คู่มือการใช้งานและแบบฝึกหัด)</span><br>
+&nbsp;└─ MANIFEST.csv <span class="muted">(บัญชีไฟล์ ขนาด ค่าแฮช รุ่นข้อมูล)</span>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-head"><h2>การทดสอบก่อนส่งมอบ</h2></div>
+        <div class="card-body">
+          <div class="row row-tight small mb8"><span style="color:var(--good);display:flex">${icon('check')}</span>
+            เปิดโครงการ QGIS บนเครื่องทดสอบได้ ไม่มีลิงก์ข้อมูลสูญหาย</div>
+          <div class="row row-tight small mb8"><span style="color:var(--good);display:flex">${icon('check')}</span>
+            คัดลอกทั้งโฟลเดอร์ไปเครื่องอื่นแล้วเปิดได้ (พาธสัมพัทธ์)</div>
+          <div class="row row-tight small mb8"><span style="color:var(--good);display:flex">${icon('check')}</span>
+            ค่าแฮชของทุกไฟล์ตรงกับบัญชีไฟล์</div>
+          <div class="row row-tight small mb8"><span style="color:var(--good);display:flex">${icon('check')}</span>
+            จำนวนรายการในตารางตรงกับฐานข้อมูลต้นทาง</div>
+          <div class="row row-tight small"><span style="color:var(--warning);display:flex">${icon('warn')}</span>
+            มีข้อค้นพบ QC คงค้าง 6 รายการ — แนบบัญชีข้อจำกัดไว้ในชุด</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="tabpanel" data-panel="b" hidden>
+  <div class="grid g-1-2 mb16">
+    <div class="card">
+      <div class="card-head"><h2>โปรไฟล์การเผยแพร่</h2></div>
+      <div class="card-body">
+        <label class="fmt"><input type="radio" name="prof" checked>
+          <span><span class="n">สาธารณะ (Open Data)</span>
+          <span class="d">สำหรับเผยแพร่บนเว็บไซต์หน่วยงานและศูนย์กลางข้อมูลเปิดภาครัฐ</span></span></label>
+        <label class="fmt"><input type="radio" name="prof">
+          <span><span class="n">หน่วยงานภายนอก (MOU)</span>
+          <span class="d">สำหรับหน่วยงานที่มีบันทึกข้อตกลง เห็นข้อมูลมากกว่าชุดสาธารณะ</span></span></label>
+        <label class="fmt"><input type="radio" name="prof">
+          <span><span class="n">ภายในองค์กร</span>
+          <span class="d">ชุดเต็มสำหรับใช้งานภายใน ไม่ตัดฟิลด์ใด</span></span></label>
+        <div class="notice notice-info mt16">${icon('info')}<div>
+          โปรไฟล์กำหนดเป็นกฎในระบบ ไม่ใช่การตัดไฟล์ด้วยมือ
+          ทำให้ชุดเผยแพร่ทุกรุ่นตัดข้อมูลชุดเดียวกันอย่างสม่ำเสมอและตรวจสอบย้อนหลังได้</div></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-head"><h2>สิ่งที่ถูกตัดออกจากชุดสาธารณะ</h2><span class="spacer"></span>
+        <span class="badge badge-critical">1 ชั้นข้อมูล · 8 ฟิลด์</span></div>
+      <div class="table-wrap">
+        <table class="tbl compact">
+          <thead><tr><th>รายการที่ตัด</th><th>ประเภท</th><th>เหตุผล</th></tr></thead>
+          <tbody>
+            <tr><td><b>L03 · ชั้นข้อมูล CCTV ทั้งชั้น</b></td><td>ชั้นข้อมูล</td>
+              <td class="small">ข้อมูลความปลอดภัย — เปิดเผยตำแหน่งและทิศทางครอบคลุมอาจกระทบการป้องกันอาชญากรรม</td></tr>
+            <tr><td><code>house_no_masked</code> (L10)</td><td>ฟิลด์</td>
+              <td class="small">ข้อมูลส่วนบุคคลตาม พ.ร.บ.คุ้มครองข้อมูลส่วนบุคคล</td></tr>
+            <tr><td><code>tax_account_ref</code> (L09)</td><td>ฟิลด์</td>
+              <td class="small">เชื่อมโยงถึงตัวบุคคลผู้เสียภาษีได้</td></tr>
+            <tr><td><code>ownership_note</code> (L01)</td><td>ฟิลด์</td>
+              <td class="small">อาจมีชื่อบุคคลและรายละเอียดข้อพิพาท</td></tr>
+            <tr><td><code>source_ref</code> (ทุกชั้น)</td><td>ฟิลด์</td>
+              <td class="small">อาจอ้างถึงหนังสือภายในและชื่อเจ้าหน้าที่ — แทนด้วยประเภทแหล่งข้อมูลแทน</td></tr>
+            <tr><td><code>created_by</code>, <code>updated_by</code></td><td>ฟิลด์</td>
+              <td class="small">ชื่อเจ้าหน้าที่ผู้บันทึก</td></tr>
+            <tr><td><code>inspection_note</code> (L04)</td><td>ฟิลด์</td>
+              <td class="small">ข้อสังเกตสภาพโครงสร้างที่อาจถูกตีความเกินขอบเขตการสำรวจ</td></tr>
+            <tr><td>รายการสถานะ "ร่าง" และ "รอตรวจสอบ"</td><td>รายการ</td>
+              <td class="small">เผยแพร่เฉพาะข้อมูลที่ผ่านการอนุมัติแล้วเท่านั้น</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="card-foot">ชุดเผยแพร่ล่าสุด <b>v2026.10</b> · สร้างเมื่อ 28 ต.ค. 2569 ·
+        <a href="#" onclick="toast('เปรียบเทียบความต่างกับรุ่น v2026.07 — เพิ่ม 1,284 รายการ แก้ไข 412 รายการ','info');return false">เปรียบเทียบกับรุ่นก่อน</a></div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-head"><h2>ชุดเผยแพร่ที่เคยสร้าง</h2></div>
+    <div class="table-wrap">
+      <table class="tbl">
+        <thead><tr><th>รุ่น</th><th>โปรไฟล์</th><th>วันที่สร้าง</th><th>ผู้สร้าง</th>
+          <th class="num">ชั้นข้อมูล</th><th class="num">รายการ</th><th>สถานะ</th><th></th></tr></thead>
+        <tbody>
+          <tr><td class="mono"><b>v2026.10</b></td><td>สาธารณะ</td><td class="small">28 ต.ค. 2569</td><td class="small">สมชาย ว.</td>
+            <td class="num">9</td><td class="num">36,919</td><td><span class="badge badge-good">เผยแพร่อยู่</span></td>
+            <td><button class="btn btn-sm btn-ghost">${icon('download')}</button></td></tr>
+          <tr><td class="mono">v2026.07</td><td>สาธารณะ</td><td class="small">15 ก.ค. 2569</td><td class="small">สมชาย ว.</td>
+            <td class="num">9</td><td class="num">35,635</td><td><span class="badge badge-outline">รุ่นก่อน</span></td>
+            <td><button class="btn btn-sm btn-ghost">${icon('download')}</button></td></tr>
+          <tr><td class="mono">v2026.10-mou</td><td>หน่วยงานภายนอก</td><td class="small">28 ต.ค. 2569</td><td class="small">ปิยะนุช ส.</td>
+            <td class="num">10</td><td class="num">37,137</td><td><span class="badge badge-info">จำกัดการเข้าถึง</span></td>
+            <td><button class="btn btn-sm btn-ghost">${icon('download')}</button></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div class="tabpanel" data-panel="c" hidden>
+  <div class="card">
+    <div class="card-head"><h2>บัญชีไฟล์ (MANIFEST.csv)</h2><span class="spacer"></span>
+      <span class="hint">ชุด GIS_Dataset_v2026.10 · 28 ต.ค. 2569</span>
+      <button class="btn btn-sm" onclick="toast('ดาวน์โหลด MANIFEST.csv','download')">${icon('download')} ดาวน์โหลด</button></div>
+    <div class="table-wrap">
+      <table class="tbl compact">
+        <thead><tr><th>ลำดับ</th><th>ไฟล์</th><th>ประเภท</th><th class="num">ขนาด</th><th class="num">จำนวนรายการ</th>
+          <th>รุ่นข้อมูล</th><th>ค่าแฮช (SHA-256 · 12 หลักแรก)</th></tr></thead>
+        <tbody id="manifest"></tbody>
+      </table>
+    </div>
+    <div class="card-foot">บัญชีไฟล์ระบุขนาด จำนวนรายการ รุ่นข้อมูล และค่าแฮชของทุกไฟล์
+      เพื่อให้ผู้ว่าจ้างตรวจรับได้ว่าไฟล์ครบถ้วนและไม่ถูกแก้ไขระหว่างส่งมอบ</div>
+  </div>
+</div>
+
+<div class="tabpanel" data-panel="d" hidden>
+  <div class="card">
+    <div class="card-head"><h2>ประวัติงานส่งออก</h2></div>
+    <div class="table-wrap">
+      <table class="tbl">
+        <thead><tr><th>รหัสงาน</th><th>รูปแบบ</th><th>ขอบเขต</th><th>ผู้สั่ง</th><th>เวลา</th><th class="num">ขนาด</th><th>สถานะ</th><th></th></tr></thead>
+        <tbody>
+          <tr><td class="mono">EXP-00912</td><td>ชุดส่งมอบเต็ม (8 รูปแบบ)</td><td class="small">ทุกชั้นข้อมูล</td>
+            <td class="small">สมชาย ว.</td><td class="small">28 ต.ค. 14:05</td><td class="num">4.82 GB</td>
+            <td><span class="badge badge-good">สำเร็จ</span></td>
+            <td><button class="btn btn-sm">${icon('download')} ดาวน์โหลด</button></td></tr>
+          <tr><td class="mono">EXP-00911</td><td>GeoPackage</td><td class="small">L01, L02, L04</td>
+            <td class="small">ปิยะนุช ส.</td><td class="small">28 ต.ค. 11:20</td><td class="num">186 MB</td>
+            <td><span class="badge badge-good">สำเร็จ</span></td>
+            <td><button class="btn btn-sm">${icon('download')}</button></td></tr>
+          <tr><td class="mono">EXP-00910</td><td>แผนที่ PDF A3</td><td class="small">ภาพรวมทุกชั้นข้อมูล</td>
+            <td class="small">ผู้บริหาร</td><td class="small">29 ต.ค. 08:30</td><td class="num">12 MB</td>
+            <td><span class="badge badge-good">สำเร็จ</span></td>
+            <td><button class="btn btn-sm">${icon('download')}</button></td></tr>
+          <tr><td class="mono">EXP-00909</td><td>XLSX + CSV</td><td class="small">L06 ทางระบายน้ำ</td>
+            <td class="small">ณัฐวุฒิ ร.</td><td class="small">27 ต.ค. 16:48</td><td class="num">3.4 MB</td>
+            <td><span class="badge badge-good">สำเร็จ</span></td>
+            <td><button class="btn btn-sm">${icon('download')}</button></td></tr>
+          <tr><td class="mono">EXP-00908</td><td>Shapefile</td><td class="small">L01 ถนน</td>
+            <td class="small">ที่ปรึกษาโครงการ</td><td class="small">27 ต.ค. 09:12</td><td class="num">—</td>
+            <td><span class="badge badge-critical">ไม่สำเร็จ</span></td>
+            <td><span class="small muted">ชื่อฟิลด์ยาวเกิน 10 อักขระ — แนะนำใช้ GeoPackage</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="card-foot">ลิงก์ดาวน์โหลดหมดอายุภายใน 24 ชั่วโมง และบันทึกการดาวน์โหลดทุกครั้งลงบันทึกการใช้งาน</div>
+  </div>
+</div>
+`;
+
+initTabs();
+
+const FMTS = [
+  ['GeoPackage (.gpkg)', 'ฐานข้อมูลเชิงพื้นที่ไฟล์เดียว เก็บได้ทุกชั้นข้อมูลพร้อมสัญลักษณ์และ Metadata — รูปแบบหลักที่ส่งมอบ', 1, 1250],
+  ['โครงการ QGIS (.qgz)', 'เปิดใช้งานได้ทันที พร้อมการจัดกลุ่มชั้นข้อมูล สัญลักษณ์ และป้ายชื่อ ใช้พาธสัมพัทธ์', 1, 4],
+  ['แผนที่ PDF (A3/A1)', 'แผนที่ภาพรวมและรายชั้นข้อมูล พร้อมคำอธิบายสัญลักษณ์ มาตราส่วน และแหล่งอ้างอิง', 1, 48],
+  ['ตาราง XLSX', 'ตารางคุณลักษณะรายชั้นข้อมูล มีแผ่นงานพจนานุกรมข้อมูลแนบ', 1, 18],
+  ['ตาราง CSV (UTF-8 BOM)', 'สำหรับนำเข้าระบบอื่น เปิดภาษาไทยใน Excel ได้ถูกต้อง', 1, 12],
+  ['GeoJSON', 'สำหรับเชื่อมต่อระบบเว็บและการแลกเปลี่ยนข้อมูล', 0, 82],
+  ['Shapefile (.shp)', 'รูปแบบเดิมที่บางหน่วยงานยังต้องการ — มีข้อจำกัดชื่อฟิลด์ 10 อักขระและภาษาไทย', 0, 210],
+  ['ภาพถ่ายภาคสนาม', 'ภาพถ่ายทั้งหมดจัดโฟลเดอร์ตามรหัสรายการ พร้อมไฟล์ดัชนี', 1, 3100]
+];
+function paintFmts() {
+  document.getElementById('fmts').innerHTML = FMTS.map((f, i) => `
+    <label class="fmt"><input type="checkbox" data-f="${i}" ${f[2] ? 'checked' : ''}>
+      <span><span class="n">${f[0]}</span><span class="d">${f[1]}</span></span></label>`).join('');
+  document.querySelectorAll('[data-f]').forEach(c => c.onchange = size);
+  size();
+}
+function size() {
+  let mb = 0;
+  document.querySelectorAll('[data-f]').forEach(c => { if (c.checked) mb += FMTS[+c.dataset.f][3]; });
+  document.getElementById('sz').textContent = mb > 1024 ? (mb / 1024).toFixed(2) + ' GB' : mb + ' MB';
+}
+paintFmts();
+
+const MAN = [
+  ['01_database/gis_dataset.gpkg', 'GeoPackage', '1.21 GB', '37,137', 'v2026.10', 'a7f3c901de42'],
+  ['01_database/gis_dataset_public.gpkg', 'GeoPackage', '1.08 GB', '36,919', 'v2026.10', '3b91ee04cc17'],
+  ['02_qgis_project/project.qgz', 'QGIS Project', '2.4 MB', '—', 'v2026.10', '55c2ab7f1904'],
+  ['02_qgis_project/styles/road.qml', 'QGIS Style', '48 KB', '—', 'v2026.10', 'e014bb7726a3'],
+  ['03_tables/L01_road.xlsx', 'Excel', '4.1 MB', '1,284', 'v2026.10', '9d77f1120ace'],
+  ['03_tables/L02_street_light.csv', 'CSV', '1.8 MB', '3,642', 'v2026.10', '11c9ae3380f2'],
+  ['04_maps_pdf/overview_A1.pdf', 'PDF Map', '22 MB', '—', 'v2026.10', '6ef0219ab441'],
+  ['05_metadata/data_dictionary.xlsx', 'Excel', '340 KB', '—', 'v2026.10', 'cc4471e90b28'],
+  ['05_metadata/metadata_iso19115.xml', 'XML', '96 KB', '10', 'v2026.10', '820fd1cb7e55'],
+  ['07_reports/qc_report_184.pdf', 'PDF', '1.9 MB', '8', 'v2026.10', '47aa90c1ff36'],
+  ['07_reports/limitations.xlsx', 'Excel', '82 KB', '4', 'v2026.10', 'b3d7001ae9c4'],
+  ['08_manual/user_manual.pdf', 'PDF', '18 MB', '—', 'v1.2', 'f90c2a71ddb8']
+];
+document.getElementById('manifest').innerHTML = MAN.map((m, i) => `<tr>
+  <td class="num">${i + 1}</td><td class="mono small">${m[0]}</td><td class="small">${m[1]}</td>
+  <td class="num">${m[2]}</td><td class="num">${m[3]}</td><td class="small">${m[4]}</td>
+  <td class="mono small muted">${m[5]}…</td></tr>`).join('');
+
+function makeJob() {
+  if (currentRole() === 'editor') return toast('สิทธิ์ผู้ป้อนข้อมูลส่งออกทั้งชุดไม่ได้', 'warn');
+  const m = modal('กำลังสร้างชุดส่งมอบ',
+    `<div class="progress" style="height:9px"><i id="pb" style="width:4%"></i></div>
+     <p class="small dim mt16" id="pt">กำลังรวบรวมชั้นข้อมูล…</p>`, '');
+  const steps = ['กำลังรวบรวมชั้นข้อมูล…', 'สร้าง GeoPackage…', 'สร้างโครงการ QGIS และไฟล์สัญลักษณ์…',
+    'จัดหน้าแผนที่ PDF…', 'สร้างตาราง XLSX/CSV…', 'รวบรวมภาพถ่ายภาคสนาม…',
+    'สร้างพจนานุกรมข้อมูลและ Metadata…', 'คำนวณค่าแฮชและสร้างบัญชีไฟล์…'];
+  let i = 0;
+  const t = setInterval(() => {
+    i++;
+    const pb = m.el.querySelector('#pb'), pt = m.el.querySelector('#pt');
+    if (!pb) return clearInterval(t);
+    pb.style.width = Math.min(100, i / steps.length * 100) + '%';
+    pt.textContent = steps[Math.min(i, steps.length - 1)];
+    if (i >= steps.length) {
+      clearInterval(t); m.close();
+      toast('สร้างชุดส่งมอบ GIS_Dataset_v2026.10 เรียบร้อย — ขนาด 4.82 GB', 'check');
+    }
+  }, 420);
+}
+const bg = document.getElementById('btnGo'); if (bg) bg.onclick = makeJob;
+const bm = document.getElementById('btnMake'); if (bm) bm.onclick = makeJob;
+document.getElementById('btnJobs').onclick = () => {
+  document.querySelector('[data-tab="d"]').click();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+};
+</script>
+</body>
+</html>

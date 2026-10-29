@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ทะเบียนชั้นข้อมูล — GeoCore GIS</title>
+<link rel="icon" href="assets/img/favicon.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/app.css">
+</head>
+<body>
+<main class="content"><div class="content-inner" id="root"></div></main>
+
+<script src="assets/js/data.js"></script>
+<script src="assets/js/shell.js"></script>
+<script>
+renderShell('layers.html');
+const root = document.getElementById('root');
+
+root.innerHTML = `
+${pageHead({
+  crumbs: ['<a href="index.html">หน้าแรก</a>', 'ทะเบียนชั้นข้อมูล'],
+  title: 'ทะเบียนชั้นข้อมูล',
+  badge: badge('10 ชั้นข้อมูล', 'info'),
+  sub: 'ชั้นข้อมูลใหม่ 8 ชั้นจากการสำรวจ และชั้นข้อมูลเดิมที่เชื่อมโยง 2 ชั้น รวมเป็นชุดใช้งานไม่น้อยกว่า 10 ชั้นข้อมูล',
+  actions: `<button class="btn" id="btnExport">${icon('download')} ส่งออกทะเบียน</button>
+            <button class="btn btn-primary" data-only="admin" id="btnNew">${icon('plus')} ขึ้นทะเบียนชั้นข้อมูล</button>`
+})}
+
+<div class="grid g4 mb16">
+  <div class="stat"><div class="lbl">ชั้นข้อมูลใหม่จากการสำรวจ</div><div class="val num">8</div>
+    <div class="foot">ขั้นต่ำตามขอบเขตงาน 8 ชั้น</div></div>
+  <div class="stat"><div class="lbl">ชั้นข้อมูลเดิมที่เชื่อมโยง</div><div class="val num">2</div>
+    <div class="foot">แนวเขตที่ดิน · สิ่งปลูกสร้าง</div></div>
+  <div class="stat"><div class="lbl">รายการข้อมูลรวม</div><div class="val num" id="sTotal">—</div>
+    <div class="foot">ทุกชั้นข้อมูลในทะเบียน</div></div>
+  <div class="stat"><div class="lbl">ความครบถ้วนเฉลี่ย</div><div class="val num" id="sAvg">—</div>
+    <div class="foot">ถ่วงน้ำหนักตามจำนวนรายการ</div></div>
+</div>
+
+<div class="card mb16">
+  <div class="card-head">
+    <h2>รายการชั้นข้อมูล</h2>
+    <span class="spacer"></span>
+    <div class="segmented" id="grpTog">
+      <button aria-pressed="true" data-g="">ทั้งหมด</button>
+      <button aria-pressed="false" data-g="โครงสร้างพื้นฐาน">โครงสร้างพื้นฐาน</button>
+      <button aria-pressed="false" data-g="สาธารณูปโภค">สาธารณูปโภค</button>
+      <button aria-pressed="false" data-g="พื้นที่และการใช้ประโยชน์">พื้นที่</button>
+      <button aria-pressed="false" data-g="ชั้นข้อมูลเดิม">ชั้นข้อมูลเดิม</button>
+    </div>
+  </div>
+  <div class="table-wrap">
+    <table class="tbl">
+      <thead><tr>
+        <th style="width:34px"></th><th>รหัส / ชื่อชั้นข้อมูล</th><th>ตารางในฐานข้อมูล</th>
+        <th>ประเภทรูปทรง</th><th class="num">จำนวน</th><th>ปริมาณ</th>
+        <th style="width:130px">ความครบถ้วน</th><th>สถานะ</th><th>ปรับปรุงล่าสุด</th><th></th>
+      </tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+  </div>
+  <div class="card-foot">ชั้นข้อมูลทุกชั้นใช้ชุดฟิลด์มาตรฐานเดียวกัน 21 ฟิลด์
+    (รหัสไม่ซ้ำ แหล่งข้อมูล วันที่สำรวจ หน่วยงานรับผิดชอบ สถานะการยืนยัน และคำอธิบายข้อมูล)
+    ดูรายละเอียดที่ <a href="data-dictionary.html">พจนานุกรมข้อมูล</a></div>
+</div>
+
+<div class="grid g2">
+  <div class="card">
+    <div class="card-head"><h2>แหล่งที่มาของข้อมูล</h2></div>
+    <div class="card-body" id="srcChart"></div>
+  </div>
+  <div class="card">
+    <div class="card-head"><h2>ผู้รับผิดชอบปรับปรุงข้อมูล</h2><span class="spacer"></span>
+      <a class="btn btn-sm" href="monitoring.html">ดูแผนการติดตาม</a></div>
+    <div class="table-wrap">
+      <table class="tbl compact">
+        <thead><tr><th>ชั้นข้อมูล</th><th>หน่วยงานภายใน</th><th>รอบปรับปรุง</th></tr></thead>
+        <tbody>
+          <tr><td>L01 · L04</td><td>กองช่าง — ฝ่ายโครงสร้างพื้นฐาน</td><td>ทุก 6 เดือน</td></tr>
+          <tr><td>L02 · L03</td><td>กองช่าง — ฝ่ายไฟฟ้าและความปลอดภัย</td><td>ทุก 3 เดือน</td></tr>
+          <tr><td>L05</td><td>กองช่าง — งานกิจการประปา</td><td>ทุก 6 เดือน</td></tr>
+          <tr><td>L06</td><td>กองสาธารณสุขและสิ่งแวดล้อม</td><td>ทุก 3 เดือน และหลังฤดูฝน</td></tr>
+          <tr><td>L07</td><td>กองการศึกษา ร่วมกับกองช่าง</td><td>ทุก 12 เดือน</td></tr>
+          <tr><td>L08</td><td>สำนักปลัด — งานนิติการ</td><td>เมื่อมีการเปลี่ยนแปลงแนวเขต</td></tr>
+          <tr><td>L09 · L10</td><td>กองคลัง — งานแผนที่ภาษี</td><td>ตามรอบจัดเก็บภาษีประจำปี</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+`;
+
+const total = LAYERS.reduce((s, l) => s + l.count, 0);
+document.getElementById('sTotal').textContent = fmt(total);
+document.getElementById('sAvg').textContent =
+  (LAYERS.reduce((s, l) => s + l.complete * l.count, 0) / total).toFixed(1) + '%';
+
+function paint(group) {
+  document.getElementById('rows').innerHTML = LAYERS.filter(l => !group || l.group === group).map(l => `
+    <tr>
+      <td>${symbolSwatch(l)}</td>
+      <td><b>${l.code}</b> ${l.name}<br>
+        <span class="small muted">${l.en} · ${l.note}</span></td>
+      <td class="mono small">${l.table}</td>
+      <td class="small">${l.geom}</td>
+      <td class="num">${fmt(l.count)}</td>
+      <td class="small nowrap">${l.qty}</td>
+      <td><div class="progress"><i style="width:${l.complete}%;background:${l.complete >= 95 ? 'var(--s3)' : l.complete >= 85 ? 'var(--s4)' : 'var(--s2)'}"></i></div>
+        <span class="xsmall num muted">${l.complete}%</span></td>
+      <td><span class="badge ${STATUS_LABEL[l.status].c}">${STATUS_LABEL[l.status].t}</span>
+        ${l.isNew ? '' : '<br><span class="xsmall muted">ชั้นข้อมูลเดิม</span>'}</td>
+      <td class="small nowrap">${l.updated}</td>
+      <td><div class="cell-actions">
+        <a class="btn btn-sm btn-ghost" href="map.html" title="ดูบนแผนที่">${icon('map')}</a>
+        <a class="btn btn-sm btn-ghost" href="metadata.html" title="Metadata">${icon('tag')}</a>
+        <a class="btn btn-sm btn-ghost" href="data-dictionary.html" title="พจนานุกรมข้อมูล">${icon('book')}</a>
+      </div></td>
+    </tr>`).join('');
+}
+paint('');
+document.querySelectorAll('#grpTog button').forEach(b => b.onclick = () => {
+  document.querySelectorAll('#grpTog button').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+  paint(b.dataset.g);
+});
+
+const srcSeg = [
+  { label: 'สำรวจภาคสนาม (GNSS)', value: 4238, color: 'var(--s1)' },
+  { label: 'ดิจิไทซ์จากภาพถ่ายทางอากาศ', value: 1612, color: 'var(--s2)' },
+  { label: 'เอกสาร/ทะเบียนหน่วยงาน', value: 884, color: 'var(--s3)' },
+  { label: 'ชั้นข้อมูลเดิมขององค์กร', value: 31325, color: 'var(--s4)' },
+  { label: 'แจ้งเหตุจากประชาชน', value: 148, color: 'var(--s5)' }
+];
+document.getElementById('srcChart').innerHTML =
+  barChart(srcSeg.map(s => ({ label: s.label, value: s.value, color: s.color })))
+  + `<p class="small muted mt16" style="margin-bottom:0">ทุกรายการบันทึกประเภทแหล่งข้อมูลในฟิลด์
+     <code>source_type_code</code> และหลักฐานอ้างอิงในฟิลด์ <code>source_ref</code>
+     ระบบไม่ยอมรับรายการที่ไม่ระบุแหล่งข้อมูล</p>`;
+
+document.getElementById('btnExport').onclick = () => toast('ส่งออกทะเบียนชั้นข้อมูลเป็น XLSX พร้อม Metadata', 'download');
+const bn = document.getElementById('btnNew');
+if (bn) bn.onclick = () => modal('ขึ้นทะเบียนชั้นข้อมูลใหม่',
+  `<div class="field"><label>รหัสชั้นข้อมูล <span class="req">*</span></label><input type="text" value="L11" ></div>
+   <div class="field"><label>ชื่อชั้นข้อมูล (ไทย) <span class="req">*</span></label><input type="text" placeholder="เช่น จุดเสี่ยงอุบัติเหตุ"></div>
+   <div class="inline-group">
+     <div class="field"><label>ประเภทรูปทรง</label><select><option>Point</option><option>LineString</option><option>MultiPolygon</option></select></div>
+     <div class="field"><label>กลุ่ม</label><select><option>โครงสร้างพื้นฐาน</option><option>สาธารณูปโภค</option><option>พื้นที่และการใช้ประโยชน์</option></select></div>
+   </div>
+   <div class="field"><label>ความแม่นยำตำแหน่งเป้าหมาย (เมตร)</label><input type="number" value="1.5" step="0.1"></div>
+   <p class="hint">ระบบจะสร้างตารางพร้อมชุดฟิลด์มาตรฐาน 21 ฟิลด์ ดัชนี GiST และ trigger บันทึกประวัติให้อัตโนมัติ</p>`,
+  `<button class="btn" data-close>ยกเลิก</button><button class="btn btn-primary" data-close onclick="toast('ขึ้นทะเบียนชั้นข้อมูลเรียบร้อย — ต้องให้ผู้ว่าจ้างเห็นชอบรายการก่อนเริ่มเก็บข้อมูล','check')">สร้างชั้นข้อมูล</button>`);
+</script>
+</body>
+</html>

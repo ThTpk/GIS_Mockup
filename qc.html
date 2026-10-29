@@ -1,0 +1,281 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ตรวจคุณภาพข้อมูล — GeoCore GIS</title>
+<link rel="icon" href="assets/img/favicon.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/app.css">
+</head>
+<body>
+<main class="content"><div class="content-inner" id="root"></div></main>
+
+<script src="assets/js/data.js"></script>
+<script src="assets/js/shell.js"></script>
+<script>
+renderShell('qc.html');
+const root = document.getElementById('root');
+
+const SEV = {
+  critical: { t: 'วิกฤต', c: 'badge-critical', col: 'var(--critical)' },
+  serious:  { t: 'สำคัญ', c: 'badge-serious',  col: 'var(--serious)' },
+  warning:  { t: 'เตือน', c: 'badge-warning',  col: 'var(--warning)' }
+};
+const FSTATE = { open: 'ยังไม่แก้ไข', fixing: 'กำลังแก้ไข', fixed: 'แก้ไขแล้ว', waived: 'ยกเว้น' };
+
+root.innerHTML = `
+${pageHead({
+  crumbs: ['<a href="index.html">หน้าแรก</a>', 'ตรวจคุณภาพข้อมูล'],
+  title: 'ตรวจคุณภาพข้อมูล (QA/QC)',
+  badge: badge('รอบล่าสุด #184 · 29 ต.ค. 2569 07:58', 'outline'),
+  sub: 'ตรวจความครบถ้วนของฟิลด์บังคับ ความซ้ำซ้อน พิกัด ค่าในโดเมน และความสัมพันธ์เชิงพื้นที่',
+  actions: `<button class="btn" id="btnReport">${icon('file')} รายงานผลตรวจ (PDF)</button>
+            <button class="btn btn-primary" data-need="write-all" id="btnRun">${icon('shield')} เรียกตรวจคุณภาพ</button>`
+})}
+
+<div class="ro-banner">${icon('info')}<span>สิทธิ์ <b>ผู้อ่านข้อมูล</b> ดูผลตรวจและดาวน์โหลดรายงานได้ แต่เรียกการตรวจรอบใหม่ไม่ได้</span></div>
+
+<div class="grid g4 mb16">
+  <div class="stat"><div class="lbl">กฎการตรวจที่เปิดใช้งาน</div><div class="val num">12</div>
+    <div class="foot">ใน 6 หมวด · ครอบคลุมทุกชั้นข้อมูล</div></div>
+  <div class="stat"><div class="lbl">รายการที่ตรวจในรอบนี้</div><div class="val num">37,137</div>
+    <div class="foot">ใช้เวลา 42 วินาที</div></div>
+  <div class="stat"><div class="lbl">ข้อค้นพบทั้งหมด</div><div class="val num">8</div>
+    <div class="foot"><span class="delta-up">−12</span> จากรอบก่อนหน้า</div></div>
+  <div class="stat"><div class="lbl">อัตราผ่านเกณฑ์</div><div class="val num">99.98%</div>
+    <div class="foot">เป้าหมาย 100% สำหรับกฎระดับวิกฤต</div></div>
+</div>
+
+<div class="tabs" data-tabs>
+  <button data-tab="f" aria-selected="true">ข้อค้นพบรอบล่าสุด</button>
+  <button data-tab="r" aria-selected="false">กฎการตรวจคุณภาพ</button>
+  <button data-tab="h" aria-selected="false">ประวัติการตรวจ</button>
+  <button data-tab="c" aria-selected="false">เกณฑ์ตรวจรับ</button>
+</div>
+
+<div class="tabpanel" data-panel="f">
+  <div class="grid g-2-1 mb16">
+    <div class="card">
+      <div class="card-head"><h2>ข้อค้นพบ ${QC_FINDINGS.length} รายการ</h2><span class="spacer"></span>
+        <div class="row row-tight" id="sevFilter">
+          <button class="chip" aria-pressed="true" data-s="">ทั้งหมด</button>
+          <button class="chip" data-s="critical">วิกฤต</button>
+          <button class="chip" data-s="serious">สำคัญ</button>
+          <button class="chip" data-s="warning">เตือน</button>
+        </div></div>
+      <div class="table-wrap">
+        <table class="tbl">
+          <thead><tr><th>ระดับ</th><th>กฎ</th><th>รายการ</th><th>รายละเอียด</th><th>ผู้รับผิดชอบ</th><th>สถานะ</th><th></th></tr></thead>
+          <tbody id="findings"></tbody>
+        </table>
+      </div>
+      <div class="card-foot">ข้อค้นพบระดับ <b>วิกฤต</b> ต้องแก้ไขให้ครบก่อนส่งมอบงวด
+        ระดับ <b>สำคัญ</b> และ <b>เตือน</b> ต้องมีคำชี้แจงหากไม่แก้ไข</div>
+    </div>
+    <div class="stack">
+      <div class="card">
+        <div class="card-head"><h2>แยกตามระดับความรุนแรง</h2></div>
+        <div class="card-body" id="sevChart"></div>
+      </div>
+      <div class="card">
+        <div class="card-head"><h2>แยกตามชั้นข้อมูล</h2></div>
+        <div class="card-body" id="layChart"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="tabpanel" data-panel="r" hidden>
+  <div class="card">
+    <div class="card-head"><h2>กฎการตรวจคุณภาพ 12 กฎ</h2><span class="spacer"></span>
+      <button class="btn btn-sm" data-only="admin" onclick="toast('เพิ่มกฎใหม่ — ระบุนิพจน์ SQL ขอบเขต และระดับความรุนแรง','plus')">
+        ${icon('plus')} เพิ่มกฎ</button></div>
+    <div class="table-wrap">
+      <table class="tbl">
+        <thead><tr><th>รหัส</th><th>หมวด</th><th>ชื่อกฎ</th><th>ขอบเขต</th><th>ระดับ</th><th>เงื่อนไขตรวจ (SQL)</th><th data-only="admin">จัดการ</th></tr></thead>
+        <tbody>${QC_RULES.map(r => `<tr>
+          <td class="mono">${r.id}</td><td class="small">${r.cat}</td><td>${r.name}</td>
+          <td class="small nowrap">${r.scope}</td>
+          <td><span class="badge ${SEV[r.sev].c}">${SEV[r.sev].t}</span></td>
+          <td><code class="small" style="word-break:break-all">${r.sql.replace(/</g, '&lt;')}</code></td>
+          <td data-only="admin"><label class="check" style="margin:0"><span class="switch">
+            <input type="checkbox" checked><span class="track"></span><span class="knob"></span></span></label></td>
+        </tr>`).join('')}</tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div class="tabpanel" data-panel="h" hidden>
+  <div class="grid g-2-1">
+    <div class="card">
+      <div class="card-head"><h2>ประวัติการตรวจคุณภาพ</h2></div>
+      <div class="table-wrap">
+        <table class="tbl">
+          <thead><tr><th>รอบ</th><th>เวลา</th><th>ผู้เรียก</th><th>ขอบเขต</th><th class="num">ตรวจ</th>
+            <th class="num">วิกฤต</th><th class="num">สำคัญ</th><th class="num">เตือน</th><th></th></tr></thead>
+          <tbody>
+            <tr><td class="mono">#184</td><td class="small">29 ต.ค. 07:58</td><td class="small">ปิยะนุช ส.</td>
+              <td class="small">ทุกชั้นข้อมูล</td><td class="num">37,137</td>
+              <td class="num" style="color:var(--critical)"><b>2</b></td><td class="num">3</td><td class="num">3</td>
+              <td><button class="btn btn-sm btn-ghost" onclick="toast('ดาวน์โหลดรายงานรอบ #184','download')">${icon('download')}</button></td></tr>
+            <tr><td class="mono">#183</td><td class="small">28 ต.ค. 02:00</td><td class="small">ระบบ (ตามรอบ)</td>
+              <td class="small">ทุกชั้นข้อมูล</td><td class="num">37,102</td>
+              <td class="num" style="color:var(--critical)"><b>4</b></td><td class="num">7</td><td class="num">9</td>
+              <td><button class="btn btn-sm btn-ghost">${icon('download')}</button></td></tr>
+            <tr><td class="mono">#182</td><td class="small">27 ต.ค. 02:00</td><td class="small">ระบบ (ตามรอบ)</td>
+              <td class="small">ทุกชั้นข้อมูล</td><td class="num">36,980</td>
+              <td class="num" style="color:var(--critical)"><b>6</b></td><td class="num">9</td><td class="num">14</td>
+              <td><button class="btn btn-sm btn-ghost">${icon('download')}</button></td></tr>
+            <tr><td class="mono">#181</td><td class="small">26 ต.ค. 14:12</td><td class="small">สมชาย ว.</td>
+              <td class="small">L05 · L06</td><td class="num">1,448</td>
+              <td class="num" style="color:var(--critical)"><b>5</b></td><td class="num">6</td><td class="num">8</td>
+              <td><button class="btn btn-sm btn-ghost">${icon('download')}</button></td></tr>
+            <tr><td class="mono">#180</td><td class="small">25 ต.ค. 02:00</td><td class="small">ระบบ (ตามรอบ)</td>
+              <td class="small">ทุกชั้นข้อมูล</td><td class="num">36,844</td>
+              <td class="num">0</td><td class="num">11</td><td class="num">18</td>
+              <td><button class="btn btn-sm btn-ghost">${icon('download')}</button></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="card-foot">ระบบตรวจอัตโนมัติทุกวันเวลา 02:00 และเรียกตรวจเพิ่มได้ตามต้องการ
+        เก็บผลย้อนหลัง 24 เดือน</div>
+    </div>
+    <div class="card">
+      <div class="card-head"><h2>แนวโน้มข้อค้นพบคงค้าง</h2></div>
+      <div class="card-body" id="trendChart"></div>
+    </div>
+  </div>
+</div>
+
+<div class="tabpanel" data-panel="c" hidden>
+  <div class="grid g2">
+    <div class="card">
+      <div class="card-head"><h2>เกณฑ์ตรวจรับฐานข้อมูล</h2></div>
+      <div class="table-wrap">
+        <table class="tbl">
+          <thead><tr><th>เกณฑ์</th><th>วิธีทดสอบ</th><th>สถานะ</th></tr></thead>
+          <tbody>
+            <tr><td>เปิดชุดข้อมูลบนเครื่องผู้ว่าจ้างได้</td>
+              <td class="small">เปิดโครงการ QGIS จากสื่อบันทึกข้อมูล ตรวจว่าทุกชั้นข้อมูลแสดงผลและไม่มีลิงก์สูญหาย</td>
+              <td><span class="badge badge-good">ผ่าน</span></td></tr>
+            <tr><td>ค้นหาและกรองข้อมูลได้</td>
+              <td class="small">ค้นด้วยรหัสรายการ ชื่อ และเงื่อนไขหน่วยงาน ตรวจผลลัพธ์เทียบกับตารางต้นทาง</td>
+              <td><span class="badge badge-good">ผ่าน</span></td></tr>
+            <tr><td>แก้ไขและบันทึกข้อมูลได้</td>
+              <td class="small">แก้ค่าฟิลด์และรูปทรง บันทึก แล้วตรวจว่าค่าถูกเก็บและมีประวัติการแก้ไข</td>
+              <td><span class="badge badge-good">ผ่าน</span></td></tr>
+            <tr><td>แสดงผลแผนที่ตามสัญลักษณ์ที่กำหนด</td>
+              <td class="small">เทียบการแสดงผลกับไฟล์รูปแบบสัญลักษณ์ที่ส่งมอบ</td>
+              <td><span class="badge badge-good">ผ่าน</span></td></tr>
+            <tr><td>ย้ายชุดข้อมูลไปเครื่องอื่นโดยไม่สูญเสียการเชื่อมโยง</td>
+              <td class="small">คัดลอกทั้งโฟลเดอร์ไปเครื่องอื่น เปิดใหม่ ตรวจพาธสัมพัทธ์และการเชื่อมโยงตาราง</td>
+              <td><span class="badge badge-good">ผ่าน</span></td></tr>
+            <tr><td>ความครบถ้วนของฟิลด์บังคับ 100%</td>
+              <td class="small">รายงานผลตรวจกฎ QC-01 ต้องไม่มีข้อค้นพบคงค้าง</td>
+              <td><span class="badge badge-warning">คงค้าง 2 รายการ</span></td></tr>
+            <tr><td>รหัสรายการไม่ซ้ำทุกชั้นข้อมูล</td>
+              <td class="small">รายงานผลตรวจกฎ QC-02</td>
+              <td><span class="badge badge-good">ผ่าน</span></td></tr>
+            <tr><td>เชื่อมโยงกับชั้นข้อมูลเดิม 2 ชั้นได้</td>
+              <td class="small">ทดสอบการเชื่อมด้วย parcel_no และ building_no กับชั้นข้อมูลเดิม</td>
+              <td><span class="badge badge-good">ผ่าน</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-head"><h2>บัญชีข้อจำกัดและรายการเข้าไม่ถึง</h2></div>
+      <div class="card-body">
+        <p class="small dim">ขอบเขตงานกำหนดให้จัดบัญชีรายการที่เข้าไม่ถึงพร้อมเหตุผลและข้อมูลทดแทนให้ตรวจสอบได้
+          ระบบบันทึกไว้เป็นรายการแยกต่างหาก ไม่ปะปนกับข้อมูลที่สำรวจได้จริง</p>
+      </div>
+      <div class="table-wrap">
+        <table class="tbl compact">
+          <thead><tr><th>พื้นที่/รายการ</th><th>เหตุผล</th><th>ข้อมูลทดแทน</th></tr></thead>
+          <tbody>
+            <tr><td>ถนนภายในโครงการจัดสรร 3 แห่ง</td><td class="small">นิติบุคคลไม่อนุญาตให้เข้าสำรวจ</td>
+              <td class="small">ดิจิไทซ์จากภาพถ่ายทางอากาศ 2568 · ระบุความแม่นยำ ≤ 3 ม.</td></tr>
+            <tr><td>แนวท่อประปาช่วงใต้ถนนสายหลัก</td><td class="small">ไม่มีข้อมูลผังท่อจากหน่วยงาน</td>
+              <td class="small">บันทึกเฉพาะจุดที่ตรวจสอบได้ · สถานะ "รอยืนยัน"</td></tr>
+            <tr><td>พื้นที่เขตติดต่อทิศตะวันออก 6.1 ไร่</td><td class="small">แนวเขตยังไม่ยุติ</td>
+              <td class="small">บันทึกเป็นพื้นที่คลาดเคลื่อน BD-02 พร้อมหลักฐานทั้งสองแหล่ง</td></tr>
+            <tr><td>สภาพโครงสร้างสะพาน 47 แห่ง</td><td class="small">อยู่นอกขอบเขตงาน (ไม่ใช่การตรวจทางวิศวกรรม)</td>
+              <td class="small">บันทึกสภาพจากการสำรวจเบื้องต้นและภาพถ่ายประกอบ</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+`;
+
+initTabs();
+
+let sevF = '';
+function paintFindings() {
+  const list = QC_FINDINGS.filter(f => !sevF || f.sev === sevF);
+  document.getElementById('findings').innerHTML = list.map(f => {
+    const rule = QC_RULES.find(r => r.id === f.rule);
+    const lay = LAYERS.find(l => l.code === f.layer);
+    return `<tr>
+      <td><span class="badge ${SEV[f.sev].c}">${SEV[f.sev].t}</span></td>
+      <td class="mono small" title="${rule.name}">${f.rule}</td>
+      <td><b class="mono">${f.feature}</b><br><span class="xsmall muted">${lay.code} ${lay.name}</span></td>
+      <td class="small">${f.msg}</td>
+      <td class="small nowrap">${f.assignee}</td>
+      <td><span class="badge ${f.state === 'fixed' ? 'badge-good' : f.state === 'fixing' ? 'badge-info' : 'badge-outline'}">${FSTATE[f.state]}</span></td>
+      <td><div class="cell-actions">
+        <a class="btn btn-sm btn-ghost" href="map.html" title="ดูบนแผนที่">${icon('map')}</a>
+        <a class="btn btn-sm btn-ghost" href="data-entry.html" data-need="write" title="แก้ไข">${icon('pencil')}</a>
+      </div></td></tr>`;
+  }).join('') || `<tr><td colspan="7" class="center muted" style="padding:26px">ไม่มีข้อค้นพบในระดับนี้</td></tr>`;
+}
+document.querySelectorAll('#sevFilter .chip').forEach(b => b.onclick = () => {
+  sevF = b.dataset.s;
+  document.querySelectorAll('#sevFilter .chip').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+  paintFindings();
+});
+paintFindings();
+
+const bySev = ['critical', 'serious', 'warning'].map(s => ({
+  label: SEV[s].t, value: QC_FINDINGS.filter(f => f.sev === s).length, color: SEV[s].col
+}));
+document.getElementById('sevChart').innerHTML =
+  `<div class="donutwrap">${donut(bySev, QC_FINDINGS.length, 'ข้อค้นพบ', 118)}
+   <div style="flex:1;min-width:120px">${legendRow(bySev)}</div></div>`;
+
+const byLayer = {};
+QC_FINDINGS.forEach(f => byLayer[f.layer] = (byLayer[f.layer] || 0) + 1);
+document.getElementById('layChart').innerHTML = barChart(
+  Object.keys(byLayer).map(c => {
+    const l = LAYERS.find(x => x.code === c);
+    return { label: `${l.code} ${l.name}`, value: byLayer[c], color: l.color };
+  }).sort((a, b) => b.value - a.value), ' รายการ');
+
+document.getElementById('trendChart').innerHTML = lineChart([{
+  color: 'var(--s8)',
+  points: [{ t: '#180', v: 29 }, { t: '#181', v: 19 }, { t: '#182', v: 29 }, { t: '#183', v: 20 }, { t: '#184', v: 8 }]
+}], { min: 0, max: 34, height: 170, aria: 'แนวโน้มจำนวนข้อค้นพบคงค้างรายรอบ' })
+  + `<p class="small muted mt8" style="margin-bottom:0">ข้อค้นพบลดลงจาก 29 เหลือ 8 รายการภายใน 5 รอบ
+     หลังปรับปรุงฟอร์มบันทึกให้ตรวจค่าตั้งแต่ตอนกรอก</p>`;
+
+document.getElementById('btnReport').onclick = () => toast('สร้างรายงานผลการตรวจคุณภาพ พร้อมบัญชีข้อจำกัดแนบท้าย', 'file');
+const br = document.getElementById('btnRun');
+if (br) br.onclick = () => modal('เรียกการตรวจคุณภาพ',
+  `<div class="field"><label>ขอบเขตการตรวจ</label>
+    <select><option>ทุกชั้นข้อมูล (10 ชั้น)</option><option>เฉพาะชั้นข้อมูลที่เลือก</option>
+      <option>เฉพาะรายการที่แก้ไขตั้งแต่รอบก่อน</option></select></div>
+   <div class="field"><label>กฎที่ใช้ตรวจ</label>
+     <select><option>กฎที่เปิดใช้งานทั้งหมด (12 กฎ)</option><option>เฉพาะกฎระดับวิกฤต</option></select></div>
+   <label class="check"><input type="checkbox" checked><span>สร้างรายงาน PDF และ XLSX เมื่อตรวจเสร็จ</span></label>
+   <label class="check"><input type="checkbox" checked><span>มอบหมายข้อค้นพบให้ผู้รับผิดชอบชั้นข้อมูลอัตโนมัติ</span></label>
+   <p class="hint">ประมาณการเวลา 40–60 วินาที สำหรับ 37,137 รายการ</p>`,
+  `<button class="btn" data-close>ยกเลิก</button>
+   <button class="btn btn-primary" data-close onclick="toast('เริ่มตรวจคุณภาพรอบ #185 — ระบบจะแจ้งเมื่อเสร็จ','shield')">เริ่มตรวจ</button>`);
+</script>
+</body>
+</html>

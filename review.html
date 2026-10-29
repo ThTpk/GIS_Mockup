@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>คิวตรวจสอบและอนุมัติ — GeoCore GIS</title>
+<link rel="icon" href="assets/img/favicon.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/app.css">
+<style>
+  .diff { font-size: .8rem; }
+  .diff .old { background: var(--critical-wash); text-decoration: line-through; padding: 1px 5px; border-radius: 4px; }
+  .diff .new { background: var(--good-wash); padding: 1px 5px; border-radius: 4px; font-weight: 600; }
+  .qrow { display: flex; gap: 11px; padding: 12px 14px; border-bottom: 1px solid var(--line); cursor: pointer; align-items: flex-start; }
+  .qrow:hover { background: var(--surface-2); }
+  .qrow.sel { background: var(--accent-wash); box-shadow: inset 3px 0 0 var(--accent); }
+</style>
+</head>
+<body>
+<main class="content"><div class="content-inner" id="root"></div></main>
+
+<script src="assets/js/data.js"></script>
+<script src="assets/js/shell.js"></script>
+<script>
+renderShell('review.html');
+const root = document.getElementById('root');
+
+const QUEUE = [
+  { code: 'RD-0171', layer: 'L01', name: 'ถนนเชื่อมเขตตำบลข้างเคียง', by: 'ธนากร ค.', when: '28 ต.ค. 2569 16:40', days: 2,
+    changes: [['เจ้าของทรัพย์สิน', 'รอยืนยัน', 'อบจ.'], ['ผู้บำรุงรักษา', 'รอยืนยัน', 'อบต.'],
+              ['สถานะการยืนยัน', 'รอยืนยัน', 'รอยืนยัน'], ['หลักฐานอ้างอิง', '—', 'หนังสือ อบจ. ที่ 51003/1842']],
+    note: 'ได้รับหนังสือตอบจาก อบจ. ระบุว่าเป็นเจ้าของทรัพย์สิน แต่มอบ อบต. ดูแลตาม MOU ปี 2567 ยังรอหนังสือยืนยันจาก อบต.',
+    photos: 3, qc: 'ผ่านทุกกฎ' },
+  { code: 'RD-0163', layer: 'L01', name: 'ซอยริมคลองสาธารณะ 7', by: 'ธนากร ค.', when: '27 ต.ค. 2569 09:12', days: 6,
+    changes: [['สภาพ', 'พอใช้', 'ต้องซ่อม'], ['เจ้าของทรัพย์สิน', '—', '—'], ['หลักฐานอ้างอิง', '—', '—']],
+    note: 'สำรวจพบผิวทางชำรุด แต่ยังระบุเจ้าของไม่ได้ ชาวบ้านแจ้งว่าเอกชนสร้างไว้เดิม',
+    photos: 2, qc: 'พบข้อค้นพบ 1 รายการ (QC-11 · ระดับสำคัญ)', bad: true },
+  { code: 'CC-00188', layer: 'L03', name: 'กล้องหน้าตลาดชุมชน', by: 'ธนากร ค.', when: '28 ต.ค. 2569 11:05', days: 2,
+    changes: [['สถานะใช้งาน', 'ใช้งานได้', 'ออฟไลน์'], ['ทิศทางครอบคลุม', '90°', '135°']],
+    note: 'กล้องออฟไลน์ตั้งแต่ 20 ต.ค. แจ้งผู้ดูแลระบบกล้องแล้ว',
+    photos: 1, qc: 'ผ่านทุกกฎ' },
+  { code: 'DI-00097', layer: 'L06', name: 'จุดน้ำท่วมซ้ำซากหน้าโรงเรียน', by: 'ณัฐวุฒิ ร.', when: '28 ต.ค. 2569 14:20', days: 3,
+    changes: [['ระดับความรุนแรง', 'ปานกลาง', 'สูง'], ['ครัวเรือนที่ได้รับผลกระทบ', '18', '34'],
+              ['ลำดับการแก้ไขที่เสนอ', '7', '4']],
+    note: 'ปรับระดับความรุนแรงตามผลประชาคมหมู่ 5 และสถิติการแจ้งเหตุ 4 ครั้งในฤดูฝนที่ผ่านมา',
+    photos: 5, qc: 'พบข้อค้นพบ 1 รายการ (QC-04 · พิกัดอยู่นอกแนวเขตอ้างอิง 14.2 ม.)', bad: true },
+  { code: 'WF-00031', layer: 'L05', name: 'ถังเก็บน้ำบ้านกลาง', by: 'อรทัย พ.', when: '27 ต.ค. 2569 15:48', days: 4,
+    changes: [['ความจุ', '—', '120 ลบ.ม.'], ['สถานะ', '—', 'ใช้งานได้'], ['ครัวเรือนที่ได้รับบริการ', '—', '248']],
+    note: 'สร้างรายการใหม่จากการสำรวจ ยังไม่ได้แนบหลักฐานทะเบียนทรัพย์สิน',
+    photos: 0, qc: 'พบข้อค้นพบ 1 รายการ (QC-01 · ฟิลด์ source_ref ว่าง)', bad: true },
+  { code: 'BD-02', layer: 'L08', name: 'พื้นที่ขาดเขตติดต่อทิศตะวันออก', by: 'ปิยะนุช ส.', when: '28 ต.ค. 2569 10:30', days: 2,
+    changes: [['พื้นที่ (ไร่)', '5.80', '6.10'], ['สถานะการยุติ', 'ยังขัดแย้ง', 'อยู่ระหว่างประสาน']],
+    note: 'ปรับพื้นที่ตามแนวเขตจัดเก็บภาษีล่าสุด และบันทึกผลการประสานหน่วยงานข้างเคียง',
+    photos: 0, qc: 'ผ่านทุกกฎ' },
+  { code: 'PS-0014', layer: 'L07', name: 'ลานอเนกประสงค์หน้าที่ทำการ', by: 'ณัฐวุฒิ ร.', when: '26 ต.ค. 2569 13:02', days: 4,
+    changes: [['การใช้ประโยชน์', 'ลานจอดรถ', 'จัดกิจกรรมและประชาคม'], ['สิ่งอำนวยความสะดวกทุกช่วงวัย', 'ไม่มี', 'มี']],
+    note: 'ติดตั้งทางลาดและราวจับแล้วเสร็จ ก.ย. 2569',
+    photos: 4, qc: 'ผ่านทุกกฎ' }
+];
+
+root.innerHTML = `
+${pageHead({
+  crumbs: ['<a href="index.html">หน้าแรก</a>', 'คิวตรวจสอบและอนุมัติ'],
+  title: 'คิวตรวจสอบและอนุมัติ',
+  badge: badge(QUEUE.length + ' รายการรอตรวจ', 'warning'),
+  sub: 'เปรียบเทียบค่าก่อน/หลัง ตรวจหลักฐานอ้างอิง แล้วอนุมัติหรือตีกลับพร้อมเหตุผล',
+  actions: `<button class="btn" id="btnBatch" data-need="write-all">อนุมัติหลายรายการ</button>`
+})}
+
+<div data-only="viewer editor" class="notice notice-warn mb16">${icon('warn')}<div>
+  <strong>สิทธิ์ปัจจุบันตรวจสอบและอนุมัติไม่ได้</strong>
+  การอนุมัติหรือตีกลับรายการสงวนไว้สำหรับกลุ่ม <b>ผู้ใช้งานทั้งสองสิทธิ์</b> และ <b>ผู้ดูแลระบบ</b>
+  และผู้ป้อนข้อมูลจะอนุมัติรายการของตนเองไม่ได้ (แยกหน้าที่เพื่อการควบคุมภายใน)
+  สลับกลุ่มสิทธิ์ที่มุมขวาบนเพื่อดูหน้าจอฉบับเต็ม</div></div>
+
+<div class="grid g4 mb16">
+  <div class="stat"><div class="lbl">รอตรวจทั้งหมด</div><div class="val num">${QUEUE.length}</div>
+    <div class="foot">ใน 5 ชั้นข้อมูล</div></div>
+  <div class="stat"><div class="lbl">เกินกรอบเวลา (3 วัน)</div><div class="val num">${QUEUE.filter(q => q.days > 3).length}</div>
+    <div class="foot"><span class="dot" style="background:var(--critical)"></span>ต้องเร่งดำเนินการ</div></div>
+  <div class="stat"><div class="lbl">มีข้อค้นพบ QC</div><div class="val num">${QUEUE.filter(q => q.bad).length}</div>
+    <div class="foot">แนะนำให้ตีกลับหรือแก้ไขก่อนอนุมัติ</div></div>
+  <div class="stat"><div class="lbl">เวลาอนุมัติเฉลี่ย</div><div class="val num">2.4</div>
+    <div class="foot">วัน · เป้าหมาย ≤ 3 วัน</div></div>
+</div>
+
+<div class="grid g-1-2">
+  <div class="card" style="align-self:start">
+    <div class="card-head"><h2>รายการรอตรวจ</h2><span class="spacer"></span>
+      <select style="width:auto;min-height:28px;padding:2px 24px 2px 8px;font-size:.78rem">
+        <option>เรียงตามเวลารอ</option><option>เรียงตามชั้นข้อมูล</option><option>เรียงตามผู้ส่ง</option></select></div>
+    <div id="queue"></div>
+  </div>
+
+  <div class="card" id="detail" style="align-self:start"></div>
+</div>
+`;
+
+let cur = 0;
+function paintQueue() {
+  document.getElementById('queue').innerHTML = QUEUE.map((q, i) => {
+    const l = LAYERS.find(x => x.code === q.layer);
+    return `<div class="qrow ${i === cur ? 'sel' : ''}" data-i="${i}">
+      <span style="margin-top:3px">${symbolSwatch(l)}</span>
+      <span style="flex:1;min-width:0">
+        <span style="font-weight:650;font-size:.86rem">${q.code}</span>
+        <span class="badge ${q.bad ? 'badge-critical' : 'badge-good'}" style="margin-left:6px">
+          ${q.bad ? 'มีข้อค้นพบ' : 'ผ่าน QC'}</span>
+        <div class="small" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${q.name}</div>
+        <div class="xsmall muted">${l.code} · ${q.by} · รอ ${q.days} วัน</div>
+      </span></div>`;
+  }).join('');
+  document.querySelectorAll('.qrow').forEach(r => r.onclick = () => { cur = +r.dataset.i; paintQueue(); paintDetail(); });
+}
+
+function paintDetail() {
+  const q = QUEUE[cur];
+  const l = LAYERS.find(x => x.code === q.layer);
+  document.getElementById('detail').innerHTML = `
+    <div class="card-head">
+      <h2>${q.code} — ${q.name}</h2><span class="spacer"></span>
+      <span class="badge badge-warning">รอตรวจสอบ ${q.days} วัน</span></div>
+    <div class="card-body">
+      <dl class="kv" style="grid-template-columns:120px 1fr;margin-bottom:16px">
+        <dt>ชั้นข้อมูล</dt><dd>${l.code} · ${l.name}</dd>
+        <dt>ผู้ส่งตรวจ</dt><dd>${q.by} <span class="muted xsmall">(ผู้ป้อนข้อมูล)</span></dd>
+        <dt>เวลาที่ส่ง</dt><dd>${q.when}</dd>
+        <dt>ไฟล์แนบ</dt><dd>${q.photos ? q.photos + ' ไฟล์' : '<span style="color:var(--critical)">ไม่มีไฟล์แนบ</span>'}</dd>
+        <dt>ผลตรวจคุณภาพ</dt><dd>${q.bad
+          ? `<span class="badge badge-critical">${q.qc}</span>` : `<span class="badge badge-good">${q.qc}</span>`}</dd>
+      </dl>
+
+      <h3 class="mb8">ค่าที่เปลี่ยนแปลง</h3>
+      <div class="table-wrap" style="border:1px solid var(--line);border-radius:var(--r-md);margin-bottom:16px">
+        <table class="tbl compact diff">
+          <thead><tr><th>ฟิลด์</th><th>ค่าเดิม</th><th>ค่าใหม่</th></tr></thead>
+          <tbody>${q.changes.map(c => `<tr><td>${c[0]}</td>
+            <td>${c[1] === c[2] ? `<span class="muted">${c[1]}</span>` : `<span class="old">${c[1]}</span>`}</td>
+            <td>${c[1] === c[2] ? `<span class="muted">${c[2]}</span>` : `<span class="new">${c[2]}</span>`}</td></tr>`).join('')}</tbody>
+        </table>
+      </div>
+
+      <h3 class="mb8">บันทึกจากผู้ส่ง</h3>
+      <p class="small dim">${q.note}</p>
+
+      ${q.bad ? `<div class="notice notice-crit mb16">${icon('warn')}<div>
+        <strong>พบข้อค้นพบจากการตรวจคุณภาพ</strong>${q.qc}
+        — พิจารณาตีกลับให้แก้ไขก่อน หรืออนุมัติพร้อมบันทึกเหตุผลการยกเว้น</div></div>` : ''}
+
+      <div class="field" data-need="write-all" style="margin-bottom:12px">
+        <label for="cmt">ความเห็นประกอบการตรวจสอบ</label>
+        <textarea id="cmt" placeholder="ระบุเหตุผลหากตีกลับ หรือข้อสังเกตเพิ่มเติม"></textarea>
+      </div>
+    </div>
+    <div class="card-foot row" data-need="write-all">
+      <button class="btn btn-danger" id="btnReject">ตีกลับให้แก้ไข</button>
+      <button class="btn" id="btnHold">พักไว้ก่อน</button>
+      <span style="flex:1"></span>
+      <button class="btn btn-primary" id="btnApprove">${icon('check')} อนุมัติรายการ</button>
+    </div>`;
+
+  const ap = document.getElementById('btnApprove');
+  if (ap) {
+    ap.onclick = () => {
+      if (q.bad) {
+        modal('ยืนยันการอนุมัติทั้งที่มีข้อค้นพบ',
+          `<div class="notice notice-warn mb16">${icon('warn')}<div>รายการนี้ยังมีข้อค้นพบจากการตรวจคุณภาพ
+            การอนุมัติจะบันทึกเป็นการยกเว้น (waiver) พร้อมชื่อผู้อนุมัติและเหตุผล</div></div>
+           <div class="field" style="margin-bottom:0"><label>เหตุผลการยกเว้น <span class="req">*</span></label>
+             <textarea placeholder="เช่น อยู่ในพื้นที่คลาดเคลื่อนของแนวเขตที่ยังไม่ยุติ จึงยอมรับพิกัดนอกแนวเขตอ้างอิงไว้ก่อน"></textarea></div>`,
+          `<button class="btn" data-close>ยกเลิก</button>
+           <button class="btn btn-primary" data-close onclick="toast('อนุมัติพร้อมบันทึกการยกเว้นแล้ว','check')">อนุมัติพร้อมยกเว้น</button>`);
+      } else { QUEUE.splice(cur, 1); cur = 0; paintQueue(); paintDetail(); toast('อนุมัติรายการแล้ว — บันทึกลง Audit Log', 'check'); }
+    };
+    document.getElementById('btnReject').onclick = () => {
+      const c = document.getElementById('cmt');
+      if (!c.value.trim()) { c.classList.add('invalid'); c.focus(); return toast('ต้องระบุเหตุผลก่อนตีกลับ', 'warn'); }
+      QUEUE.splice(cur, 1); cur = 0; paintQueue(); paintDetail();
+      toast('ตีกลับรายการแล้ว — แจ้งผู้ส่งทางระบบและอีเมล', 'x');
+    };
+    document.getElementById('btnHold').onclick = () => toast('พักรายการไว้ — ยังอยู่ในคิวและไม่นับเวลารอ', 'info');
+  }
+  if (!QUEUE.length) document.getElementById('detail').innerHTML =
+    `<div class="empty">${icon('check')}<div><b>ไม่มีรายการรอตรวจสอบ</b><br>งานในคิวดำเนินการครบแล้ว</div></div>`;
+}
+paintQueue(); paintDetail();
+const bb = document.getElementById('btnBatch');
+if (bb) bb.onclick = () => modal('อนุมัติหลายรายการพร้อมกัน',
+  `<p class="small dim">เลือกเฉพาะรายการที่ผ่านการตรวจคุณภาพทุกกฎ ระบบจะไม่ให้อนุมัติกลุ่มสำหรับรายการที่มีข้อค้นพบ</p>
+   ${QUEUE.map(q => `<label class="check"><input type="checkbox" ${q.bad ? 'disabled' : 'checked'}>
+     <span>${q.code} — ${q.name} ${q.bad ? '<span class="badge badge-critical">มีข้อค้นพบ</span>' : ''}</span></label>`).join('')}`,
+  `<button class="btn" data-close>ยกเลิก</button>
+   <button class="btn btn-primary" data-close onclick="toast('อนุมัติกลุ่มเรียบร้อย','check')">อนุมัติที่เลือก</button>`);
+</script>
+</body>
+</html>

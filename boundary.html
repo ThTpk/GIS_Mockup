@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>วิเคราะห์แนวเขต — GeoCore GIS</title>
+<link rel="icon" href="assets/img/favicon.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link rel="stylesheet" href="assets/css/app.css">
+<style>
+  .bmap { height: 440px; border-radius: var(--r-md); overflow: hidden; border: 1px solid var(--line); }
+  .leaflet-container { font-family: var(--font); background: var(--surface-2); }
+  @media (max-width: 680px) { .bmap { height: 320px; } }
+</style>
+</head>
+<body>
+<main class="content"><div class="content-inner" id="root"></div></main>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="assets/js/data.js"></script>
+<script src="assets/js/geodata.js"></script>
+<script src="assets/js/shell.js"></script>
+<script>
+renderShell('boundary.html');
+const root = document.getElementById('root');
+
+const RES = { conflict: { t: 'ยังขัดแย้ง', c: 'badge-critical' }, pending: { t: 'อยู่ระหว่างประสาน', c: 'badge-warning' }, resolved: { t: 'ยุติแล้ว', c: 'badge-good' } };
+const totalArea = BOUNDARY.reduce((s, b) => s + b.area, 0);
+const totalParcel = BOUNDARY.reduce((s, b) => s + b.parcels, 0);
+const totalBld = BOUNDARY.reduce((s, b) => s + b.bld, 0);
+
+root.innerHTML = `
+${pageHead({
+  crumbs: ['<a href="index.html">หน้าแรก</a>', 'วิเคราะห์แนวเขต'],
+  title: 'วิเคราะห์แนวเขตและพื้นที่คลาดเคลื่อน',
+  badge: badge(BOUNDARY.length + ' พื้นที่', 'warning'),
+  sub: 'เปรียบเทียบแนวเขตตามเอกสารอ้างอิงกับแนวเขตจัดเก็บที่ใช้งานจริง พร้อมบัญชีพื้นที่ หลักฐาน และข้อเสนอแนวทางดำเนินการ',
+  actions: `<button class="btn" id="btnExport">${icon('download')} ส่งออกบัญชีพื้นที่คลาดเคลื่อน</button>
+            <button class="btn btn-primary" data-need="write" id="btnNew">${icon('plus')} บันทึกพื้นที่ใหม่</button>`
+})}
+
+<div class="notice notice-warn mb16">${icon('warn')}<div>
+  <strong>ขอบเขตการใช้งานของข้อมูลชุดนี้</strong>
+  ข้อมูลแนวเขตในระบบจัดทำขึ้น<b>เพื่อการบริหารจัดการและวางแผนเท่านั้น</b>
+  ไม่ใช้แทนการรังวัดรับรองกรรมสิทธิ์ที่ดิน และการยุติข้อขัดแย้งแนวเขตเป็นอำนาจของหน่วยงานที่เกี่ยวข้อง
+  ระบบทำหน้าที่รวบรวมหลักฐาน คำนวณพื้นที่ต่าง และบันทึกผลการประสานงานให้ตรวจสอบได้</div></div>
+
+<div class="grid g4 mb16">
+  <div class="stat"><div class="lbl">พื้นที่คลาดเคลื่อนรวม</div><div class="val num">${totalArea.toFixed(2)}</div>
+    <div class="foot">ไร่ · จาก ${BOUNDARY.length} พื้นที่</div></div>
+  <div class="stat"><div class="lbl">แปลงที่ดินที่ได้รับผลกระทบ</div><div class="val num">${fmt(totalParcel)}</div>
+    <div class="foot">แปลง (${(totalParcel / 18420 * 100).toFixed(1)}% ของทั้งหมด)</div></div>
+  <div class="stat"><div class="lbl">สิ่งปลูกสร้างที่ได้รับผลกระทบ</div><div class="val num">${fmt(totalBld)}</div>
+    <div class="foot">หลัง</div></div>
+  <div class="stat"><div class="lbl">สถานะการยุติ</div><div class="val num">1 / ${BOUNDARY.length}</div>
+    <div class="foot"><span class="dot" style="background:var(--good)"></span>ยุติแล้ว 1 · ประสาน 1 · ขัดแย้ง 2</div></div>
+</div>
+
+<div class="grid g-2-1 mb16">
+  <div class="card">
+    <div class="card-head"><h2>แผนที่เปรียบเทียบแนวเขต</h2><span class="spacer"></span>
+      <div class="row row-tight">
+        <label class="check" style="margin:0;font-size:.78rem"><input type="checkbox" id="cRef" checked><span>แนวเขตอ้างอิง</span></label>
+        <label class="check" style="margin:0;font-size:.78rem"><input type="checkbox" id="cDiff" checked><span>พื้นที่คลาดเคลื่อน</span></label>
+      </div></div>
+    <div class="card-body">
+      <div class="bmap" id="bmap"></div>
+      <div class="legend mt16">
+        <span class="li"><span class="sw" style="background:transparent;border:2px dashed var(--s8)"></span>แนวเขตตามเอกสารอ้างอิง</span>
+        <span class="li"><span class="sw" style="background:var(--s8);opacity:.45"></span>พื้นที่คลาดเคลื่อน</span>
+        <span class="li"><span class="sw" style="background:var(--s1)"></span>โครงข่ายถนน</span>
+      </div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-head"><h2>พื้นที่คลาดเคลื่อนรายแห่ง</h2></div>
+    <div class="card-body" id="areaChart"></div>
+  </div>
+</div>
+
+<div class="card mb16">
+  <div class="card-head"><h2>บัญชีพื้นที่คลาดเคลื่อน</h2><span class="spacer"></span>
+    <span class="hint">ตารางที่ 2 — เปรียบเทียบแหล่งข้อมูลแนวเขต</span></div>
+  <div class="table-wrap">
+    <table class="tbl">
+      <thead><tr><th>รหัส</th><th>ตำแหน่ง</th><th>ลักษณะ</th><th class="num">พื้นที่ (ไร่)</th>
+        <th>แนวเขตอ้างอิง</th><th>แนวเขตจัดเก็บจริง</th><th class="num">แปลง</th><th class="num">อาคาร</th>
+        <th>สถานะ</th><th>บันทึก / หลักฐาน</th></tr></thead>
+      <tbody>${BOUNDARY.map(b => `<tr>
+        <td class="mono"><b>${b.code}</b></td>
+        <td>${b.side}</td>
+        <td class="small">${b.type}</td>
+        <td class="num">${b.area.toFixed(2)}</td>
+        <td class="small">${b.ref}</td>
+        <td class="small">${b.actual}</td>
+        <td class="num">${fmt(b.parcels)}</td>
+        <td class="num">${fmt(b.bld)}</td>
+        <td><span class="badge ${RES[b.status].c}">${RES[b.status].t}</span></td>
+        <td class="small">${b.note}</td></tr>`).join('')}</tbody>
+    </table>
+  </div>
+  <div class="card-foot">คำนวณพื้นที่ด้วย <code>ST_Area(ST_SymDifference(ref.geom, actual.geom)::geography)</code>
+    และนับแปลง/อาคารด้วย <code>ST_Intersects</code> กับชั้นข้อมูลเดิม L09 และ L10</div>
+</div>
+
+<div class="grid g2">
+  <div class="card">
+    <div class="card-head"><h2>ผลกระทบต่อการปฏิบัติงาน</h2></div>
+    <div class="table-wrap">
+      <table class="tbl compact">
+        <thead><tr><th>ด้าน</th><th>ผลกระทบที่ตรวจพบ</th></tr></thead>
+        <tbody>
+          <tr><td>การจัดเก็บรายได้</td><td class="small">แปลงที่ดิน 3 รายในพื้นที่ BD-01 ถูกแจ้งประเมินจากสองหน่วยงาน
+            ต้องตรวจสอบและคืนเงินหากซ้ำซ้อน</td></tr>
+          <tr><td>การให้บริการสาธารณะ</td><td class="small">ครัวเรือน 28 หลังในพื้นที่ BD-02 ไม่มีหน่วยงานรับผิดชอบที่ชัดเจน
+            สำหรับการซ่อมไฟส่องสว่างและเก็บขยะ</td></tr>
+          <tr><td>การขออนุญาตก่อสร้าง</td><td class="small">อาคาร 7 หลังในพื้นที่ BD-07 ตั้งคร่อมแนวเขตตามประกาศ
+            ต้องกำหนดหน่วยงานผู้พิจารณาอนุญาต</td></tr>
+          <tr><td>การจัดทำแผนพัฒนา</td><td class="small">พื้นที่ซ้อนทับทำให้การนับประชากรและครัวเรือนเป้าหมายคลาดเคลื่อน
+            กระทบการจัดสรรงบประมาณรายโครงการ</td></tr>
+          <tr><td>ฐานข้อมูล GIS</td><td class="small">รายการ 14 รายการมีพิกัดอยู่นอกแนวเขตอ้างอิง
+            ถูกทำเครื่องหมายโดยกฎ QC-04 และยกเว้นไว้พร้อมเหตุผล</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-head"><h2>ข้อเสนอแนวทางดำเนินการ</h2></div>
+    <div class="card-body">
+      <ul class="tl" style="margin:0">
+        <li class="done"><div class="tt">1 · รวบรวมหลักฐานแนวเขตทุกแหล่ง</div>
+          <div class="td">ประกาศกระทรวง แผนที่ระวาง ภาพถ่ายทางอากาศ และแนวเขตจัดเก็บจริง
+            จัดเก็บเป็นรายการแยกในชั้นข้อมูล L08 พร้อมธง <code>is_reference</code> — <b>ดำเนินการแล้ว</b></div></li>
+        <li class="done"><div class="tt">2 · คำนวณและจัดทำบัญชีพื้นที่ต่าง</div>
+          <div class="td">คำนวณพื้นที่ จำนวนแปลง และอาคารที่ได้รับผลกระทบรายพื้นที่ — <b>ดำเนินการแล้ว</b></div></li>
+        <li class="now"><div class="tt">3 · ประสานหน่วยงานข้างเคียงและจังหวัด</div>
+          <div class="td">ขอข้อมูลแนวเขตและนัดตรวจสอบร่วมในพื้นที่ บันทึกผลการประสานทุกครั้งเป็นหลักฐาน
+            — <b>อยู่ระหว่างดำเนินการ (2 จาก 4 พื้นที่)</b></div></li>
+        <li><div class="tt">4 · เสนอแนวเขตอ้างอิงเดียวกัน</div>
+          <div class="td">จัดทำข้อเสนอพร้อมแผนที่และบัญชีพื้นที่ เสนอผู้บริหารและหน่วยงานที่มีอำนาจพิจารณา</div></li>
+        <li><div class="tt">5 · ปรับปรุงฐานข้อมูลตามผลการพิจารณา</div>
+          <div class="td">เมื่อมีข้อยุติ ปรับแนวเขตอ้างอิงในระบบและบันทึกเป็นเวอร์ชันใหม่
+            โดยคงประวัติแนวเขตเดิมไว้ทั้งหมด</div></li>
+      </ul>
+      <div class="notice notice-info mt16">${icon('info')}<div>
+        การอนุมัติ การยุติข้อขัดแย้งแนวเขต และการรับรองจากหน่วยงานภายนอก
+        ไม่ใช่เงื่อนไขที่ผู้จัดทำข้อมูลรับประกันได้ ระบบจึงเก็บ<b>หลักฐานการศึกษา การประสานงาน
+        และข้อเสนอขั้นตอนต่อไป</b>ให้ครบถ้วนแทน</div></div>
+    </div>
+  </div>
+</div>
+`;
+
+/* map */
+const bm = L.map('bmap', { zoomControl: true, attributionControl: false }).setView(CENTER, 12);
+L.tileLayer('https://services.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}',
+  { maxZoom: 16 }).addTo(bm);
+function cvb(n) { return getComputedStyle(document.documentElement).getPropertyValue(n).trim(); }
+L.geoJSON({ type: 'FeatureCollection', features: ROAD_FEATS }, { style: { color: cvb('--s1'), weight: 1.6, opacity: .5 } }).addTo(bm);
+const refLayer = L.geoJSON(STUDY_AREA, { style: { color: cvb('--s8'), weight: 2.5, dashArray: '8 5', fill: false } }).addTo(bm);
+const diffLayer = L.geoJSON({ type: 'FeatureCollection', features: BOUNDARY_FEATS }, {
+  style: { color: cvb('--s8'), weight: 1.5, fillColor: cvb('--s8'), fillOpacity: .35 },
+  onEachFeature: (f, l) => l.bindPopup(
+    `<b>${f.properties.code}</b><br>${f.properties.name}<br>
+     พื้นที่ ${f.properties.area_rai} ไร่ · ${f.properties.parcels} แปลง · ${f.properties.buildings} หลัง<br>
+     <span style="color:#52514e">${f.properties.note}</span>`)
+}).addTo(bm);
+bm.fitBounds(refLayer.getBounds(), { padding: [20, 20] });
+document.getElementById('cRef').onchange = e => e.target.checked ? refLayer.addTo(bm) : bm.removeLayer(refLayer);
+document.getElementById('cDiff').onchange = e => e.target.checked ? diffLayer.addTo(bm) : bm.removeLayer(diffLayer);
+
+document.getElementById('areaChart').innerHTML =
+  barChart(BOUNDARY.map(b => ({
+    label: b.code + ' ' + b.side.replace('เขตติดต่อ', ''),
+    value: b.area,
+    color: b.status === 'conflict' ? 'var(--critical)' : b.status === 'pending' ? 'var(--warning)' : 'var(--good)'
+  })), ' ไร่')
+  + `<div class="legend"><span class="li"><span class="sw" style="background:var(--critical)"></span>ยังขัดแย้ง</span>
+     <span class="li"><span class="sw" style="background:var(--warning)"></span>อยู่ระหว่างประสาน</span>
+     <span class="li"><span class="sw" style="background:var(--good)"></span>ยุติแล้ว</span></div>
+     <dl class="kv mt16"><dt>พื้นที่รวม</dt><dd><b>${totalArea.toFixed(2)} ไร่</b></dd>
+     <dt>คิดเป็น</dt><dd>${(totalArea * 1600).toLocaleString('th-TH')} ตร.ม.</dd>
+     <dt>วิธีคำนวณ</dt><dd class="small">ST_SymDifference บนระบบพิกัด EPSG:32647</dd></dl>`;
+
+document.getElementById('btnExport').onclick = () => toast('ส่งออกบัญชีพื้นที่คลาดเคลื่อนเป็น XLSX พร้อมแผนที่ PDF รายพื้นที่', 'download');
+const bn = document.getElementById('btnNew'); if (bn) bn.onclick = () => location.href = 'data-entry.html';
+</script>
+</body>
+</html>

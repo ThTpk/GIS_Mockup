@@ -1,0 +1,681 @@
+openapi: 3.1.0
+
+info:
+  title: GeoCore GIS API
+  version: "1.0.0"
+  summary: REST API สำหรับระบบสารสนเทศภูมิศาสตร์ขององค์กรปกครองส่วนท้องถิ่น
+  description: |
+    API สำหรับอ่านและบันทึกชั้นข้อมูลเชิงพื้นที่ ตรวจคุณภาพข้อมูล ส่งออกและเผยแพร่ชุดข้อมูล
+    ข้อมูลเชิงพื้นที่จัดเก็บใน PostgreSQL + PostGIS ระบบพิกัด EPSG:4326
+
+    เอกสารนี้เป็นฉบับย่อประกอบต้นแบบหน้าจอ แสดง endpoint หลักเพื่ออธิบายรูปแบบคำขอและคำตอบ
+    รายการ endpoint ทั้งหมดดูได้ที่หน้า "รายการ API" ของต้นแบบ
+  contact:
+    name: ทีมพัฒนาระบบ
+  license:
+    name: ใช้ภายใต้เงื่อนไขที่ผู้ว่าจ้างกำหนด
+
+servers:
+  - url: https://{host}/api/v1
+    variables:
+      host:
+        default: gis.example.go.th
+
+security:
+  - bearerAuth: []
+
+tags:
+  - name: auth
+    description: การยืนยันตัวตนและข้อมูลผู้ใช้ปัจจุบัน
+  - name: layers
+    description: ทะเบียนชั้นข้อมูล พจนานุกรมข้อมูล และ Metadata
+  - name: features
+    description: อ่านและบันทึกรายการข้อมูลเชิงพื้นที่
+  - name: workflow
+    description: กระบวนการตรวจสอบและอนุมัติข้อมูล
+  - name: spatial
+    description: การวิเคราะห์เชิงพื้นที่
+  - name: survey
+    description: การสำรวจภาคสนามและการซิงก์ข้อมูลออฟไลน์
+  - name: qc
+    description: การตรวจคุณภาพข้อมูล
+  - name: exports
+    description: การส่งออกและเผยแพร่ชุดข้อมูล
+
+paths:
+
+  /auth/login:
+    post:
+      tags: [auth]
+      summary: เข้าสู่ระบบ
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, password]
+              properties:
+                username: { type: string }
+                password: { type: string, format: password }
+                device_id: { type: string }
+      responses:
+        "200":
+          description: เข้าสู่ระบบสำเร็จ
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LoginResponse" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "428":
+          description: ต้องยืนยันตัวตนสองขั้นตอนก่อน
+
+  /layers:
+    get:
+      tags: [layers]
+      summary: รายการชั้นข้อมูลทั้งหมด
+      responses:
+        "200":
+          description: สำเร็จ
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Layer" }
+
+  /layers/{layerCode}/fields:
+    get:
+      tags: [layers]
+      summary: พจนานุกรมข้อมูลระดับฟิลด์ของชั้นข้อมูล
+      parameters:
+        - $ref: "#/components/parameters/LayerCode"
+      responses:
+        "200":
+          description: สำเร็จ
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/FieldDefinition" }
+
+  /layers/{layerCode}/features:
+    get:
+      tags: [features]
+      summary: ค้นรายการข้อมูลในชั้นข้อมูล
+      parameters:
+        - $ref: "#/components/parameters/LayerCode"
+        - name: bbox
+          in: query
+          description: กรอบพื้นที่ minLon,minLat,maxLon,maxLat (EPSG:4326)
+          schema: { type: string, example: "101.2184,12.8014,101.3127,12.8906" }
+        - name: filter
+          in: query
+          description: เงื่อนไขตามไวยากรณ์ OGC CQL2-Text
+          schema: { type: string, example: "owner_agency_id=3 AND confirm_status_code='pending'" }
+        - name: sortby
+          in: query
+          schema: { type: string, default: "-updated_at" }
+        - name: fields
+          in: query
+          description: รายชื่อฟิลด์ที่ต้องการ คั่นด้วยจุลภาค
+          schema: { type: string }
+        - name: geometry
+          in: query
+          schema: { type: string, enum: [full, simplified, none], default: full }
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Cursor"
+      responses:
+        "200":
+          description: สำเร็จ
+          content:
+            application/geo+json:
+              schema: { $ref: "#/components/schemas/FeatureCollection" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+    post:
+      tags: [features]
+      summary: สร้างรายการข้อมูลใหม่ (สถานะเริ่มต้น draft)
+      parameters:
+        - $ref: "#/components/parameters/LayerCode"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/geo+json:
+            schema: { $ref: "#/components/schemas/Feature" }
+      responses:
+        "201":
+          description: สร้างสำเร็จ
+          headers:
+            Location: { schema: { type: string } }
+            ETag: { schema: { type: string } }
+          content:
+            application/geo+json:
+              schema: { $ref: "#/components/schemas/Feature" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+
+  /layers/{layerCode}/features/{featureId}:
+    get:
+      tags: [features]
+      summary: อ่านรายการเดียว
+      parameters:
+        - $ref: "#/components/parameters/LayerCode"
+        - $ref: "#/components/parameters/FeatureId"
+      responses:
+        "200":
+          description: สำเร็จ
+          headers:
+            ETag: { schema: { type: string } }
+          content:
+            application/geo+json:
+              schema: { $ref: "#/components/schemas/Feature" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+    patch:
+      tags: [features]
+      summary: แก้ไขบางฟิลด์ของรายการ
+      parameters:
+        - $ref: "#/components/parameters/LayerCode"
+        - $ref: "#/components/parameters/FeatureId"
+        - name: If-Match
+          in: header
+          required: true
+          description: เลขเวอร์ชันปัจจุบันของรายการ ป้องกันการเขียนทับ
+          schema: { type: string, example: '"2"' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        "200":
+          description: แก้ไขสำเร็จ
+          headers:
+            ETag: { schema: { type: string } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "428":
+          description: ไม่ได้ส่งส่วนหัว If-Match
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+
+    delete:
+      tags: [features]
+      summary: ยกเลิกใช้งานรายการ (soft delete)
+      parameters:
+        - $ref: "#/components/parameters/LayerCode"
+        - $ref: "#/components/parameters/FeatureId"
+      responses:
+        "204": { description: ยกเลิกใช้งานสำเร็จ }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /workflow/{featureId}/approve:
+    post:
+      tags: [workflow]
+      summary: อนุมัติรายการ
+      parameters:
+        - $ref: "#/components/parameters/FeatureId"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                comment: { type: string }
+                waiver_reason:
+                  type: string
+                  description: บังคับระบุเมื่ออนุมัติรายการที่ยังมีข้อค้นพบจากการตรวจคุณภาพ
+      responses:
+        "200": { description: อนุมัติสำเร็จ }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409":
+          description: รายการไม่ได้อยู่ในสถานะรอตรวจสอบ หรือผู้อนุมัติเป็นผู้บันทึกเอง
+
+  /spatial/nearby:
+    get:
+      tags: [spatial]
+      summary: ค้นรายการใกล้พิกัดที่กำหนด
+      parameters:
+        - { name: lon, in: query, required: true, schema: { type: number } }
+        - { name: lat, in: query, required: true, schema: { type: number } }
+        - { name: radius_m, in: query, schema: { type: number, default: 200, maximum: 5000 } }
+        - { name: layers, in: query, schema: { type: string, example: "L01,L02,L04" } }
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: สำเร็จ
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  origin: { type: object }
+                  radius_m: { type: number }
+                  results:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        layer_code: { type: string }
+                        feature_code: { type: string }
+                        name_th: { type: string }
+                        distance_m: { type: number }
+
+  /survey/sync:
+    post:
+      tags: [survey]
+      summary: ซิงก์ข้อมูลที่บันทึกออฟไลน์เป็นชุด
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [session_uid, items]
+              properties:
+                session_uid: { type: string, format: uuid }
+                device_id: { type: string }
+                items:
+                  type: array
+                  maxItems: 500
+                  items:
+                    type: object
+                    required: [client_id, op, layer_code]
+                    properties:
+                      client_id: { type: string }
+                      op: { type: string, enum: [create, update, delete] }
+                      layer_code: { type: string }
+                      feature_uid: { type: string, format: uuid }
+                      base_version: { type: integer }
+                      feature: { $ref: "#/components/schemas/Feature" }
+      responses:
+        "207":
+          description: ผลลัพธ์รายรายการ — รายการที่ขัดแย้งไม่ทำให้ทั้งชุดล้มเหลว
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  session_uid: { type: string }
+                  accepted: { type: integer }
+                  conflicted: { type: integer }
+                  results:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        client_id: { type: string }
+                        status: { type: integer }
+                        feature_uid: { type: string }
+                        feature_code: { type: string }
+                        reason: { type: string }
+                        message: { type: string }
+
+  /qc/runs:
+    post:
+      tags: [qc]
+      summary: เรียกการตรวจคุณภาพข้อมูล
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                scope_layers:
+                  type: array
+                  items: { type: string }
+                rules: { type: string, enum: [all_active, critical_only, custom], default: all_active }
+                generate_report: { type: boolean, default: true }
+                auto_assign: { type: boolean, default: true }
+      responses:
+        "202":
+          description: รับงานแล้ว
+          headers:
+            Location: { schema: { type: string } }
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  run_id: { type: integer }
+                  status: { type: string }
+                  poll_url: { type: string }
+
+  /qc/runs/{runId}:
+    get:
+      tags: [qc]
+      summary: สรุปผลการตรวจคุณภาพ 1 รอบ
+      parameters:
+        - { name: runId, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: สำเร็จ
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/QcRun" }
+
+  /exports:
+    post:
+      tags: [exports]
+      summary: สร้างงานส่งออกชุดข้อมูล
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [formats]
+              properties:
+                formats:
+                  type: array
+                  items:
+                    type: string
+                    enum: [gpkg, qgs, shp, geojson, xlsx, csv, pdf_map, photos]
+                scope:
+                  type: object
+                  properties:
+                    layers: { type: string }
+                    record_status:
+                      type: array
+                      items: { type: string }
+                    srid: { type: integer, default: 4326 }
+                options:
+                  type: object
+                  properties:
+                    relative_paths: { type: boolean, default: true }
+                    include_data_dictionary: { type: boolean, default: true }
+                    include_metadata: { type: boolean, default: true }
+                    include_styles: { type: boolean, default: true }
+                    include_manifest: { type: boolean, default: true }
+                    csv_encoding: { type: string, enum: [utf8, utf8-bom], default: utf8-bom }
+                    fail_on_critical_findings: { type: boolean, default: false }
+      responses:
+        "202":
+          description: รับงานแล้ว
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  export_uid: { type: string }
+                  status: { type: string, enum: [queued, running, done, failed] }
+                  estimated_size_mb: { type: number }
+                  expires_at: { type: string, format: date-time }
+
+  /publications:
+    post:
+      tags: [exports]
+      summary: สร้างชุดเผยแพร่ตามโปรไฟล์ที่กำหนด
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [profile_code, version_label]
+              properties:
+                profile_code: { type: string, example: public_open_data }
+                version_label: { type: string, example: v2026.10 }
+                note: { type: string }
+      responses:
+        "201":
+          description: สร้างชุดเผยแพร่สำเร็จ
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Publication" }
+
+  /tiles/{layerCode}/{z}/{x}/{y}.pbf:
+    get:
+      tags: [layers]
+      summary: Vector tile สำหรับแสดงผลแผนที่
+      parameters:
+        - $ref: "#/components/parameters/LayerCode"
+        - { name: z, in: path, required: true, schema: { type: integer, minimum: 0, maximum: 22 } }
+        - { name: x, in: path, required: true, schema: { type: integer } }
+        - { name: y, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: ไทล์รูปแบบ Mapbox Vector Tile
+          content:
+            application/vnd.mapbox-vector-tile:
+              schema: { type: string, format: binary }
+        "304": { description: ไม่มีการเปลี่ยนแปลง (ETag ตรงกัน) }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+components:
+
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    LayerCode:
+      name: layerCode
+      in: path
+      required: true
+      description: รหัสชั้นข้อมูล เช่น L01
+      schema: { type: string, pattern: "^L[0-9]{2}$" }
+    FeatureId:
+      name: featureId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    Limit:
+      name: limit
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 500, default: 50 }
+    Cursor:
+      name: cursor
+      in: query
+      description: ตัวชี้หน้าถัดไปจากผลลัพธ์ก่อนหน้า (keyset pagination)
+      schema: { type: string }
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      description: ป้องกันการสร้างรายการซ้ำเมื่อส่งคำขอซ้ำ
+      schema: { type: string, format: uuid }
+
+  responses:
+    Unauthorized:
+      description: ไม่มีโทเค็นหรือโทเค็นหมดอายุ
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }
+    Forbidden:
+      description: กลุ่มสิทธิ์หรือขอบเขตชั้นข้อมูลไม่อนุญาต
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }
+    NotFound:
+      description: ไม่พบรายการ หรือผู้ใช้ไม่มีสิทธิ์เห็นรายการนั้น
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }
+    Conflict:
+      description: เวอร์ชันไม่ตรง รหัสรายการซ้ำ หรือพิกัดซ้ำตำแหน่ง
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }
+    ValidationFailed:
+      description: ข้อมูลไม่ผ่านกฎการตรวจคุณภาพ
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }
+
+  schemas:
+
+    Problem:
+      type: object
+      description: รูปแบบข้อความแจ้งข้อผิดพลาดตาม RFC 9457
+      properties:
+        type: { type: string, format: uri }
+        title: { type: string }
+        status: { type: integer }
+        detail: { type: string }
+        instance: { type: string }
+        request_id: { type: string, format: uuid }
+        errors:
+          type: array
+          items:
+            type: object
+            properties:
+              field: { type: string }
+              rule: { type: string, example: QC-01 }
+              message: { type: string }
+
+    LoginResponse:
+      type: object
+      properties:
+        access_token: { type: string }
+        token_type: { type: string, const: Bearer }
+        expires_in: { type: integer, example: 1800 }
+        refresh_token: { type: string }
+        user: { $ref: "#/components/schemas/CurrentUser" }
+
+    CurrentUser:
+      type: object
+      properties:
+        user_uid: { type: string, format: uuid }
+        user_code: { type: string }
+        display_name: { type: string }
+        org_unit: { type: string }
+        roles:
+          type: array
+          items: { type: string, enum: [viewer, editor, both, admin] }
+        permissions:
+          type: array
+          items: { type: string }
+        layer_scope:
+          type: array
+          items:
+            type: object
+            properties:
+              layer_code: { type: string }
+              can_write: { type: boolean }
+
+    Layer:
+      type: object
+      properties:
+        layer_code: { type: string, example: L01 }
+        name_th: { type: string }
+        name_en: { type: string }
+        table_name: { type: string }
+        geometry_type: { type: string }
+        layer_group: { type: string }
+        is_new_layer: { type: boolean }
+        target_accuracy_m: { type: number }
+        update_cycle_months: { type: integer }
+        custodian_unit: { type: string }
+        default_sensitivity: { type: string, enum: [public, internal, confidential, restricted] }
+        publishable:
+          type: boolean
+          description: false สำหรับชั้นข้อมูลอ่อนไหวที่ต้องไม่อยู่ในชุดเผยแพร่
+        feature_count: { type: integer }
+
+    FieldDefinition:
+      type: object
+      properties:
+        field_name: { type: string }
+        data_type: { type: string }
+        is_required: { type: boolean }
+        is_core: { type: boolean, description: true = อยู่ในชุดฟิลด์มาตรฐานของทุกชั้นข้อมูล }
+        domain_name: { type: string }
+        description_th: { type: string }
+        example: { type: string }
+
+    CoreProperties:
+      type: object
+      description: ชุดฟิลด์มาตรฐานที่ทุกชั้นข้อมูลต้องมี
+      required: [feature_code, layer_code, source_ref, source_type_code, surveyed_on]
+      properties:
+        feature_code: { type: string, pattern: "^[A-Z]{2,3}-[0-9]{3,6}$", example: RD-0101 }
+        layer_code: { type: string }
+        name_th: { type: string }
+        description: { type: string }
+        owner_agency_id: { type: integer, description: เจ้าของทรัพย์สิน }
+        maintainer_agency_id: { type: integer, description: ผู้บำรุงรักษา (แยกจากเจ้าของ) }
+        confirm_status_code: { type: string, enum: [confirmed, pending, conflict, unknown] }
+        source_ref: { type: string, description: หลักฐานอ้างอิงที่ตรวจสอบได้ }
+        source_type_code: { type: string, enum: [field_survey, aerial, agency_doc, citizen_report, legacy] }
+        surveyed_on: { type: string, format: date }
+        positional_accuracy_m: { type: number }
+        record_status_code: { type: string, enum: [draft, submitted, approved, rejected, retired] }
+        sensitivity_code: { type: string, enum: [public, internal, confidential, restricted] }
+        is_public: { type: boolean }
+        version_no: { type: integer }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    Feature:
+      type: object
+      description: GeoJSON Feature ตาม RFC 7946
+      required: [type, geometry, properties]
+      properties:
+        type: { type: string, const: Feature }
+        id: { type: string, format: uuid }
+        geometry:
+          type: object
+          nullable: true
+          properties:
+            type:
+              type: string
+              enum: [Point, LineString, MultiLineString, Polygon, MultiPolygon]
+            coordinates: { type: array, items: {} }
+        properties: { $ref: "#/components/schemas/CoreProperties" }
+
+    FeatureCollection:
+      type: object
+      required: [type, features]
+      properties:
+        type: { type: string, const: FeatureCollection }
+        numberMatched: { type: integer }
+        numberReturned: { type: integer }
+        next_cursor: { type: string, nullable: true }
+        features:
+          type: array
+          items: { $ref: "#/components/schemas/Feature" }
+        links:
+          type: array
+          items:
+            type: object
+            properties:
+              rel: { type: string }
+              href: { type: string }
+
+    QcRun:
+      type: object
+      properties:
+        run_id: { type: integer }
+        status: { type: string, enum: [running, done, failed] }
+        started_at: { type: string, format: date-time }
+        finished_at: { type: string, format: date-time }
+        checked_count: { type: integer }
+        finding_count: { type: integer }
+        by_severity:
+          type: object
+          properties:
+            critical: { type: integer }
+            serious: { type: integer }
+            warning: { type: integer }
+
+    Publication:
+      type: object
+      properties:
+        publication_uid: { type: string, format: uuid }
+        version_label: { type: string }
+        profile_code: { type: string }
+        layer_count: { type: integer }
+        record_count: { type: integer }
+        excluded:
+          type: object
+          description: ชั้นข้อมูลและฟิลด์ที่ถูกตัดออกตามโปรไฟล์การเผยแพร่
+          properties:
+            layers:
+              type: array
+              items: { type: string }
+            fields: { type: object, additionalProperties: { type: array, items: { type: string } } }
+        created_at: { type: string, format: date-time }

@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>รายการ API — GeoCore GIS</title>
+<link rel="icon" href="assets/img/favicon.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/app.css">
+</head>
+<body>
+<main class="content"><div class="content-inner" id="root"></div></main>
+
+<script src="assets/js/data.js"></script>
+<script src="assets/js/shell.js"></script>
+<script>
+renderShell('api-list.html');
+const root = document.getElementById('root');
+
+const totalEp = API_GROUPS.reduce((s, g) => s + g.eps.length, 0);
+const byMethod = {};
+API_GROUPS.forEach(g => g.eps.forEach(e => byMethod[e.m] = (byMethod[e.m] || 0) + 1));
+
+const fmtPath = p => p.replace(/\{(\w+)\}/g, '<span class="p">{$1}</span>');
+
+root.innerHTML = `
+${pageHead({
+  crumbs: ['<a href="index.html">หน้าแรก</a>', 'รายการ API'],
+  title: 'รายการ API',
+  badge: badge(`${totalEp} endpoint · ${API_GROUPS.length} กลุ่มงาน`, 'info'),
+  sub: 'REST API เวอร์ชัน v1 สำหรับเว็บ แอปสำรวจบนมือถือ และการเชื่อมต่อระบบอื่น พร้อมบริการมาตรฐาน OGC',
+  actions: `<a class="btn" href="api/openapi.yaml" download>${icon('download')} OpenAPI 3.1 (YAML)</a>
+            <a class="btn btn-primary" href="api-spec.html">${icon('code')} ดูข้อกำหนดรายละเอียด</a>`
+})}
+
+<div class="grid g4 mb16">
+  <div class="stat"><div class="lbl">Endpoint ทั้งหมด</div><div class="val num">${totalEp}</div>
+    <div class="foot">ใน ${API_GROUPS.length} กลุ่มงาน</div></div>
+  <div class="stat"><div class="lbl">Base URL</div><div class="val mono" style="font-size:.95rem">/api/v1</div>
+    <div class="foot">HTTPS เท่านั้น · TLS 1.3</div></div>
+  <div class="stat"><div class="lbl">การยืนยันตัวตน</div><div class="val" style="font-size:1.05rem">OAuth 2.0 / OIDC</div>
+    <div class="foot">Bearer JWT · อายุ 30 นาที</div></div>
+  <div class="stat"><div class="lbl">มาตรฐานที่รองรับ</div><div class="val" style="font-size:1.05rem">OGC + GeoJSON</div>
+    <div class="foot">WMS · WFS · OGC API — Features · MVT</div></div>
+</div>
+
+<div class="card mb16">
+  <div class="card-body" style="padding-bottom:8px">
+    <div class="row" style="gap:14px">
+      <div style="flex:1 1 240px;min-width:0">
+        <input type="search" id="q" placeholder="ค้นหา endpoint หรือคำอธิบาย…" aria-label="ค้นหา API">
+      </div>
+      <div class="row row-tight" id="mFilter">
+        <button class="chip" aria-pressed="true" data-m="">ทั้งหมด (${totalEp})</button>
+        ${['GET', 'POST', 'PATCH', 'PUT', 'DELETE'].filter(m => byMethod[m])
+          .map(m => `<button class="chip" data-m="${m}">${m} (${byMethod[m]})</button>`).join('')}
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="groups"></div>
+
+<div class="grid g2 mt16">
+  <div class="card">
+    <div class="card-head"><h2>ข้อกำหนดร่วมของทุก endpoint</h2></div>
+    <div class="table-wrap">
+      <table class="tbl compact">
+        <tbody>
+          <tr><td style="font-weight:600;background:var(--surface-2);width:150px">Base URL</td>
+            <td class="small"><code>https://&lt;host&gt;/api/v1</code> — ทุกคำขอต้องผ่าน HTTPS</td></tr>
+          <tr><td style="font-weight:600;background:var(--surface-2)">การยืนยันตัวตน</td>
+            <td class="small"><code>Authorization: Bearer &lt;ACCESS_TOKEN&gt;</code></td></tr>
+          <tr><td style="font-weight:600;background:var(--surface-2)">รูปแบบข้อมูล</td>
+            <td class="small"><code>application/json</code> และ <code>application/geo+json</code> สำหรับข้อมูลเชิงพื้นที่</td></tr>
+          <tr><td style="font-weight:600;background:var(--surface-2)">การแบ่งหน้า</td>
+            <td class="small"><code>?limit=50&amp;cursor=…</code> (keyset) คืนค่า <code>next_cursor</code> ในผลลัพธ์</td></tr>
+          <tr><td style="font-weight:600;background:var(--surface-2)">การกรอง</td>
+            <td class="small"><code>?filter=</code> ตามไวยากรณ์ CQL2-Text · <code>?bbox=</code> ตามมาตรฐาน OGC</td></tr>
+          <tr><td style="font-weight:600;background:var(--surface-2)">การเรียงลำดับ</td>
+            <td class="small"><code>?sortby=-updated_at,feature_code</code></td></tr>
+          <tr><td style="font-weight:600;background:var(--surface-2)">การเลือกฟิลด์</td>
+            <td class="small"><code>?fields=feature_code,name_th,owner_agency_id</code></td></tr>
+          <tr><td style="font-weight:600;background:var(--surface-2)">ป้องกันเขียนทับ</td>
+            <td class="small"><code>If-Match: "&lt;version_no&gt;"</code> บังคับกับทุก PATCH/PUT คืน <code>409</code> หากชนกัน</td></tr>
+          <tr><td style="font-weight:600;background:var(--surface-2)">Idempotency</td>
+            <td class="small"><code>Idempotency-Key</code> บังคับกับ POST ที่ซิงก์จากอุปกรณ์ภาคสนาม</td></tr>
+          <tr><td style="font-weight:600;background:var(--surface-2)">อัตราการเรียก</td>
+            <td class="small">600 ครั้ง/นาที ต่อผู้ใช้ · ไทล์แผนที่ 3,000 ครั้ง/นาที · แจ้งผ่านส่วนหัว <code>RateLimit-*</code></td></tr>
+          <tr><td style="font-weight:600;background:var(--surface-2)">การติดตามคำขอ</td>
+            <td class="small"><code>X-Request-Id</code> ส่งกลับทุกคำตอบ และบันทึกลง Audit Log</td></tr>
+          <tr><td style="font-weight:600;background:var(--surface-2)">รุ่นของ API</td>
+            <td class="small">กำหนดในเส้นทาง (<code>/v1</code>) · ประกาศล่วงหน้า 12 เดือนก่อนเลิกให้บริการรุ่นเดิม</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-head"><h2>สิทธิ์การเรียกใช้ตามกลุ่มผู้ใช้งาน</h2></div>
+    <div class="card-body">
+      <p class="small dim">สิทธิ์ตรวจสอบสองชั้น คือที่ชั้น API ตามกลุ่มสิทธิ์
+        และที่ชั้นฐานข้อมูลด้วย Row Level Security ตามขอบเขตชั้นข้อมูลและพื้นที่ของผู้ใช้</p>
+      <div class="table-wrap" style="border:1px solid var(--line);border-radius:var(--r-md)">
+        <table class="tbl compact">
+          <thead><tr><th>กลุ่มสิทธิ์</th><th>เรียกใช้ได้</th></tr></thead>
+          <tbody>
+            <tr><td><b>ผู้อ่านข้อมูล</b></td><td class="small">ทุก <code>GET</code> ในขอบเขตที่ได้รับสิทธิ์
+              · สร้างงานส่งออกแผนที่/ตารางได้</td></tr>
+            <tr><td><b>ผู้ป้อนข้อมูล</b></td><td class="small"><code>POST/PATCH</code> รายการของตนเองที่เป็นร่าง
+              · <code>POST /survey/sync</code> · แนบไฟล์ · ไม่มีสิทธิ์อนุมัติและส่งออกทั้งชั้น</td></tr>
+            <tr><td><b>ทั้งสองสิทธิ์</b></td><td class="small">ทุกอย่างข้างต้น + อนุมัติ/ตีกลับ + เรียกตรวจคุณภาพ
+              + ส่งออกและเผยแพร่ + ดู Audit Log</td></tr>
+            <tr><td><b>ผู้ดูแลระบบ</b></td><td class="small">ทุก endpoint รวมถึงการจัดการผู้ใช้งาน
+              ทะเบียนชั้นข้อมูล กฎ QC และการสำรองข้อมูล</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="notice notice-warn mt16">${icon('warn')}<div>
+        <strong>ข้อมูลอ่อนไหว</strong>
+        endpoint ที่คืนข้อมูลชั้น L03 (CCTV) ต้องมีสิทธิ์รายบุคคล และบันทึกการเข้าถึงทุกครั้งลง
+        <code>audit.access_log</code> แยกจากบันทึกการแก้ไขปกติ</div></div>
+    </div>
+  </div>
+</div>
+`;
+
+let q = '', mf = '';
+function paint() {
+  document.getElementById('groups').innerHTML = API_GROUPS.map(g => {
+    const eps = g.eps.filter(e =>
+      (!mf || e.m === mf) &&
+      (!q || (e.p + e.d + g.g).toLowerCase().includes(q)));
+    if (!eps.length) return '';
+    return `<div class="card mb16">
+      <div class="card-head">
+        <span style="display:grid;place-items:center;width:28px;height:28px;border-radius:var(--r-sm);
+          background:var(--accent-wash);color:var(--accent-ink)">${icon(g.icon)}</span>
+        <div style="flex:1;min-width:0">
+          <h2>${g.g}</h2>
+          <div class="xsmall muted">${g.desc}</div>
+        </div>
+        <span class="badge badge-outline mono">${g.base}</span>
+        <span class="badge badge-info">${eps.length}</span>
+      </div>
+      <div class="table-wrap">
+        <table class="tbl compact">
+          <thead><tr><th style="width:70px">วิธี</th><th style="width:38%">เส้นทาง</th>
+            <th>คำอธิบาย</th><th style="width:170px">กลุ่มสิทธิ์ที่เรียกได้</th></tr></thead>
+          <tbody>${eps.map(e => `<tr>
+            <td><span class="m m-${e.m}">${e.m}</span></td>
+            <td><code class="path">${fmtPath(e.p)}</code></td>
+            <td class="small">${e.d}</td>
+            <td class="small muted">${e.role}</td></tr>`).join('')}</tbody>
+        </table>
+      </div>
+    </div>`;
+  }).join('') || `<div class="card"><div class="empty">${icon('search')}
+    <div>ไม่พบ endpoint ที่ตรงกับเงื่อนไข</div></div></div>`;
+}
+document.getElementById('q').addEventListener('input', e => { q = e.target.value.trim().toLowerCase(); paint(); });
+document.querySelectorAll('#mFilter .chip').forEach(b => b.onclick = () => {
+  mf = b.dataset.m;
+  document.querySelectorAll('#mFilter .chip').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+  paint();
+});
+paint();
+</script>
+</body>
+</html>

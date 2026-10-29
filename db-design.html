@@ -1,0 +1,470 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>การออกแบบฐานข้อมูล — GeoCore GIS</title>
+<link rel="icon" href="assets/img/favicon.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/app.css">
+<style>
+  .erd text { font-family: var(--font); }
+  .erd .hdr { fill: var(--b500); }
+  .erd .hdr-ref { fill: var(--s3); }
+  .erd .hdr-app { fill: var(--s7); }
+  .erd .hdr-aud { fill: var(--ink-3); }
+  .erd .bx { fill: var(--surface-1); stroke: var(--line-strong); stroke-width: 1.2; }
+  .erd .tt { font-size: 11.5px; font-weight: 700; fill: #fff; }
+  .erd .col { font-size: 10.5px; fill: var(--ink-1); }
+  .erd .pk { font-size: 10.5px; font-weight: 700; fill: var(--accent-ink); }
+  .erd .ty { font-size: 9.5px; fill: var(--ink-3); }
+  .erd .rel { stroke: var(--line-strong); stroke-width: 1.3; fill: none; }
+  .erd .rl { font-size: 9px; fill: var(--ink-3); font-family: var(--mono); }
+  .erd .sep { stroke: var(--line); stroke-width: 1; }
+  .schema-map .g { fill: var(--surface-2); stroke: var(--line); }
+  .schema-map .gt { font: 700 12px var(--font); fill: var(--ink-1); }
+  .schema-map .gs { font: 400 10px var(--font); fill: var(--ink-3); }
+  .schema-map .tb { fill: var(--surface-1); stroke: var(--line-strong); stroke-width: 1; }
+  .schema-map .tbt { font: 500 10px var(--mono); fill: var(--ink-1); }
+</style>
+</head>
+<body>
+<main class="content"><div class="content-inner" id="root"></div></main>
+
+<script src="assets/js/data.js"></script>
+<script src="assets/js/shell.js"></script>
+<script>
+renderShell('db-design.html');
+const root = document.getElementById('root');
+
+/* --- ERD helper --- */
+function entity(x, y, w, title, kind, cols) {
+  const h = 26 + cols.length * 17 + 8;
+  const rows = cols.map((c, i) => {
+    const yy = y + 42 + i * 17;
+    return `<text class="${c[2] ? 'pk' : 'col'}" x="${x + 11}" y="${yy}">${c[0]}</text>
+            <text class="ty" x="${x + w - 11}" y="${yy}" text-anchor="end">${c[1]}</text>`;
+  }).join('');
+  return { h, svg: `
+    <rect class="bx" x="${x}" y="${y}" width="${w}" height="${h}" rx="7"/>
+    <path class="${kind}" d="M${x} ${y + 7}a7 7 0 0 1 7-7h${w - 14}a7 7 0 0 1 7 7v19H${x}z"/>
+    <text class="tt" x="${x + 11}" y="${y + 18}">${title}</text>
+    ${rows}` };
+}
+
+const E = {};
+E.user   = entity(16, 16, 212, 'app.user_account', 'hdr-app', [
+  ['user_uid', 'uuid PK', 1], ['user_code', 'varchar(16)', 0], ['display_name', 'varchar(128)', 0],
+  ['email', 'varchar(255)', 0], ['oidc_subject', 'varchar(255)', 0], ['expires_on', 'date', 0]]);
+E.agency = entity(16, 176, 212, 'ref.agency', 'hdr-ref', [
+  ['agency_id', 'smallint PK', 1], ['agency_code', 'varchar(16)', 0], ['name_th', 'varchar(255)', 0],
+  ['abbr_th', 'varchar(32)', 0], ['agency_level', 'varchar(24)', 0]]);
+E.layer  = entity(16, 318, 212, 'ref.layer_registry', 'hdr-ref', [
+  ['layer_code', 'varchar(8) PK', 1], ['name_th', 'varchar(128)', 0], ['table_name', 'varchar(128)', 0],
+  ['geometry_type', 'varchar(32)', 0], ['target_accuracy_m', 'numeric', 0], ['publishable', 'boolean', 0],
+  ['update_cycle_months', 'smallint', 0]]);
+E.scope  = entity(16, 500, 212, 'app.user_layer_scope', 'hdr-app', [
+  ['user_uid', 'uuid FK', 1], ['layer_code', 'varchar(8) FK', 1], ['can_write', 'boolean', 0],
+  ['area_filter', 'geometry', 0]]);
+
+E.road = entity(296, 96, 300, 'gis.road  (L01)', 'hdr', [
+  ['feature_uid', 'uuid PK', 1], ['feature_code', 'varchar(32) UQ', 0], ['layer_code', 'varchar(8) FK', 0],
+  ['name_th', 'varchar(255)', 0], ['road_class_code', 'varchar(16)', 0], ['surface_code', 'varchar(16)', 0],
+  ['condition_code', 'varchar(16)', 0], ['width_m', 'numeric(5,2)', 0], ['length_m', 'numeric GEN', 0],
+  ['owner_agency_id', 'smallint FK', 0], ['maintainer_agency_id', 'smallint FK', 0],
+  ['confirm_status_code', 'varchar(16)', 0], ['source_ref', 'text', 0], ['source_type_code', 'varchar(24)', 0],
+  ['surveyed_on', 'date', 0], ['record_status_code', 'varchar(16)', 0], ['sensitivity_code', 'varchar(16)', 0],
+  ['is_public', 'boolean', 0], ['created_by / updated_by', 'uuid FK', 0], ['version_no', 'integer', 0],
+  ['geom', 'MultiLineString', 0]]);
+
+E.light  = entity(668, 16, 268, 'gis.street_light  (L02)', 'hdr', [
+  ['feature_uid', 'uuid PK', 1], ['light_type_code', 'varchar(16)', 0], ['wattage', 'smallint', 0],
+  ['status_code', 'varchar(16)', 0], ['road_uid', 'uuid FK', 0], ['chainage_m', 'numeric', 0],
+  ['geom', 'Point', 0]]);
+E.cctv   = entity(668, 182, 268, 'gis.cctv  (L03 · อ่อนไหว)', 'hdr', [
+  ['feature_uid', 'uuid PK', 1], ['camera_type_code', 'varchar(16)', 0], ['view_azimuth_deg', 'smallint', 0],
+  ['status_code', 'varchar(16)', 0], ['road_uid', 'uuid FK', 0], ['geom', 'Point', 0]]);
+E.bridge = entity(668, 330, 268, 'gis.bridge  (L04)', 'hdr', [
+  ['feature_uid', 'uuid PK', 1], ['structure_code', 'varchar(16)', 0], ['span_length_m', 'numeric', 0],
+  ['condition_code', 'varchar(16)', 0], ['road_uid', 'uuid FK', 0], ['geom', 'Point', 0]]);
+
+E.audit  = entity(296, 560, 300, 'audit.change_log', 'hdr-aud', [
+  ['log_id', 'bigserial PK', 1], ['occurred_at', 'timestamptz', 0], ['actor_uid', 'uuid', 0],
+  ['action', 'varchar(16)', 0], ['table_name', 'varchar(64)', 0], ['record_pk', 'uuid', 0],
+  ['old_values / new_values', 'jsonb', 0], ['changed_cols', 'text[]', 0]]);
+E.att    = entity(668, 478, 268, 'app.attachment', 'hdr-app', [
+  ['attachment_uid', 'uuid PK', 1], ['feature_uid', 'uuid FK', 0], ['file_name', 'varchar(255)', 0],
+  ['sha256', 'char(64)', 0], ['exif_geom', 'Point', 0]]);
+E.qc     = entity(668, 610, 268, 'qc.qc_finding', 'hdr-aud', [
+  ['finding_id', 'bigserial PK', 1], ['rule_code', 'varchar(16) FK', 0], ['feature_uid', 'uuid', 0],
+  ['severity', 'varchar(16)', 0], ['state', 'varchar(16)', 0]]);
+
+const ERD = `
+<svg class="erd" viewBox="0 0 960 740" role="img"
+  aria-label="ผังความสัมพันธ์ของตารางหลัก: ถนนเชื่อมกับไฟส่องสว่าง CCTV สะพาน หน่วยงาน ทะเบียนชั้นข้อมูล ผู้ใช้งาน บันทึกการแก้ไข ไฟล์แนบ และผลตรวจคุณภาพ">
+  <defs>
+    <marker id="one" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="8" markerHeight="8" orient="auto">
+      <path d="M5 1 V9" stroke="var(--line-strong)" stroke-width="1.6"/></marker>
+    <marker id="many" viewBox="0 0 12 12" refX="11" refY="6" markerWidth="10" markerHeight="10" orient="auto">
+      <path d="M1 1 L11 6 L1 11" fill="none" stroke="var(--line-strong)" stroke-width="1.4"/></marker>
+  </defs>
+
+  <!-- relationships (drawn first, behind boxes) -->
+  <path class="rel" d="M228 230 H262 V300 H292" marker-end="url(#many)"/>
+  <text class="rl" x="232" y="226">1</text><text class="rl" x="268" y="296">N</text>
+  <path class="rel" d="M228 360 H262 V200 H292" marker-end="url(#many)"/>
+  <path class="rel" d="M228 90  H258 V150 H292" marker-end="url(#many)"/>
+  <path class="rel" d="M596 160 H664" marker-end="url(#many)"/>
+  <text class="rl" x="602" y="155">1</text><text class="rl" x="648" y="155">N</text>
+  <path class="rel" d="M596 230 H632 V266 H664" marker-end="url(#many)"/>
+  <path class="rel" d="M596 300 H620 V400 H664" marker-end="url(#many)"/>
+  <path class="rel" d="M446 500 V556" marker-end="url(#many)"/>
+  <text class="rl" x="452" y="534">trigger</text>
+  <path class="rel" d="M596 440 H628 V524 H664" marker-end="url(#many)"/>
+  <path class="rel" d="M596 466 H616 V640 H664" marker-end="url(#many)"/>
+  <path class="rel" d="M122 148 V172" marker-end="url(#many)"/>
+  <path class="rel" d="M122 450 V496" marker-end="url(#many)"/>
+
+  ${E.user.svg}${E.agency.svg}${E.layer.svg}${E.scope.svg}
+  ${E.road.svg}${E.light.svg}${E.cctv.svg}${E.bridge.svg}
+  ${E.audit.svg}${E.att.svg}${E.qc.svg}
+</svg>`;
+
+/* --- schema map --- */
+const SCHEMAS = [
+  { n: 'gis', d: 'ชั้นข้อมูลเชิงพื้นที่ 10 ชั้น (15 ตาราง)', c: 'var(--s1)',
+    t: ['road', 'street_light', 'cctv', 'bridge', 'water_facility', 'water_pipe', 'water_body',
+        'drainage_line', 'drainage_issue', 'public_space', 'community_landmark',
+        'admin_boundary', 'boundary_discrepancy', 'land_parcel', 'building'] },
+  { n: 'ref', d: 'ทะเบียนชั้นข้อมูลและค่าอ้างอิง', c: 'var(--s3)',
+    t: ['layer_registry', 'agency', 'village', 'code_domain'] },
+  { n: 'app', d: 'ผู้ใช้งาน สิทธิ์ ไฟล์แนบ การส่งออกและเผยแพร่', c: 'var(--s7)',
+    t: ['user_account', 'role', 'permission', 'role_permission', 'user_role', 'user_layer_scope',
+        'attachment', 'survey_session', 'citizen_proposal', 'publication', 'publication_profile', 'export_job'] },
+  { n: 'qc', d: 'กฎและผลการตรวจคุณภาพข้อมูล', c: 'var(--s2)',
+    t: ['qc_rule', 'qc_run', 'qc_finding'] },
+  { n: 'audit', d: 'บันทึกการเปลี่ยนแปลงและการเข้าถึง (append-only)', c: 'var(--ink-3)',
+    t: ['change_log', 'access_log'] },
+  { n: 'plan', d: 'ตัวชี้วัดและโครงการที่อ้างอิงพื้นที่', c: 'var(--s6)',
+    t: ['kpi_indicator', 'kpi_value', 'project', 'project_feature'] }
+];
+
+root.innerHTML = `
+${pageHead({
+  crumbs: ['<a href="index.html">หน้าแรก</a>', 'การออกแบบฐานข้อมูล'],
+  title: 'การออกแบบฐานข้อมูล',
+  badge: badge('PostgreSQL 16 + PostGIS 3.4', 'info'),
+  sub: 'โครงสร้างสคีมา ผังความสัมพันธ์ ชุดฟิลด์มาตรฐาน ดัชนี และสคริปต์สร้างฐานข้อมูล',
+  actions: `<a class="btn" href="schema/postgis-schema.sql" download>${icon('download')} ดาวน์โหลด SQL</a>
+            <a class="btn" href="data-dictionary.html">${icon('book')} พจนานุกรมข้อมูล</a>`
+})}
+
+<div class="grid g4 mb16">
+  <div class="stat"><div class="lbl">สคีมา</div><div class="val num">6</div><div class="foot">gis · ref · app · qc · audit · plan</div></div>
+  <div class="stat"><div class="lbl">ตารางทั้งหมด</div><div class="val num">40</div><div class="foot">ตารางเชิงพื้นที่ 15 ตาราง</div></div>
+  <div class="stat"><div class="lbl">ชุดฟิลด์มาตรฐาน</div><div class="val num">21</div><div class="foot">ฟิลด์ที่ทุกชั้นข้อมูลต้องมี</div></div>
+  <div class="stat"><div class="lbl">ระบบพิกัด</div><div class="val" style="font-size:1.1rem">EPSG:4326</div>
+    <div class="foot">คำนวณระยะด้วย EPSG:32647</div></div>
+</div>
+
+<div class="tabs" data-tabs>
+  <button data-tab="p" aria-selected="true">หลักการออกแบบ</button>
+  <button data-tab="e" aria-selected="false">ผังความสัมพันธ์ (ERD)</button>
+  <button data-tab="s" aria-selected="false">สคีมาและตาราง</button>
+  <button data-tab="i" aria-selected="false">ดัชนีและประสิทธิภาพ</button>
+  <button data-tab="q" aria-selected="false">ตัวอย่างคำสั่ง SQL</button>
+</div>
+
+<div class="tabpanel" data-panel="p">
+  <div class="grid g2 mb16">
+    <div class="card"><div class="card-head"><h2>หลักการออกแบบ 8 ข้อ</h2></div>
+      <div class="card-body">
+        <ol style="padding-left:18px;margin:0;font-size:.88rem">
+          <li class="mb8"><b>ชุดฟิลด์มาตรฐานเดียวกันทุกชั้นข้อมูล</b> — รหัสรายการไม่ซ้ำ แหล่งข้อมูล วันที่สำรวจ
+            หน่วยงานรับผิดชอบหรือสถานะรอยืนยัน และคำอธิบายข้อมูล บังคับด้วยข้อจำกัดระดับฐานข้อมูล
+            ไม่ใช่ความเคยชินของผู้กรอก</li>
+          <li class="mb8"><b>แยกเจ้าของทรัพย์สินกับผู้บำรุงรักษา</b> — เป็นสองฟิลด์คนละฟิลด์
+            พร้อมฟิลด์สถานะการยืนยัน เพื่อให้บันทึกกรณีข้อมูลหน่วยงานไม่ตรงกันได้โดยไม่ต้องเดา</li>
+          <li class="mb8"><b>จัดเก็บใน EPSG:4326 คำนวณด้วย geography</b> — ใช้ระบบพิกัดเดียวทั่วทั้งฐานข้อมูล
+            ลดความผิดพลาดจากการแปลงพิกัด และคำนวณระยะ/พื้นที่บนทรงรีให้ค่าถูกต้อง</li>
+          <li class="mb8"><b>ค่าคำนวณเก็บเป็น generated column</b> — ความยาวถนนและพื้นที่
+            คำนวณจากรูปทรงโดยอัตโนมัติ จึงไม่มีทางไม่ตรงกับรูปทรงที่เก็บไว้</li>
+          <li class="mb8"><b>ไม่ลบข้อมูลจริง</b> — ใช้สถานะ <code>retired</code> แทนการลบ
+            และเก็บประวัติการเปลี่ยนแปลงทุกเวอร์ชันไว้ในสคีมา audit</li>
+          <li class="mb8"><b>แยกชั้นความลับที่ระดับแถว</b> — ฟิลด์ <code>sensitivity_code</code> และ
+            <code>is_public</code> ทำให้สร้างชุดเผยแพร่ได้ด้วยกฎ ไม่ใช่การคัดไฟล์ด้วยมือ</li>
+          <li class="mb8"><b>ควบคุมสิทธิ์ที่ระดับฐานข้อมูล</b> — Row Level Security บังคับขอบเขตชั้นข้อมูลและพื้นที่
+            จึงคุ้มครองแม้ผู้ใช้เชื่อมต่อผ่าน QGIS โดยตรง ไม่ผ่านเว็บ</li>
+          <li><b>ค่ารหัสอยู่ในตารางอ้างอิง</b> — เพิ่มประเภทผิวทางหรือประเภทอุปกรณ์ใหม่ได้
+            โดยไม่ต้องแก้โครงสร้างตารางหรือ deploy ระบบใหม่</li>
+        </ol>
+      </div></div>
+
+    <div class="stack">
+      <div class="card"><div class="card-head"><h2>ชุดฟิลด์มาตรฐาน (Core attribute set)</h2>
+        <span class="spacer"></span><span class="badge badge-info">21 ฟิลด์</span></div>
+        <div class="table-wrap" style="max-height:420px;overflow-y:auto">
+          <table class="tbl compact">
+            <thead><tr><th>ฟิลด์</th><th>ชนิด</th><th>ข้อจำกัด</th></tr></thead>
+            <tbody>${CORE_FIELDS.map(f => `<tr><td class="mono small"><b>${f.f}</b></td>
+              <td class="mono small">${f.t}</td><td class="small">${f.n || '—'}</td></tr>`).join('')}</tbody>
+          </table>
+        </div>
+        <div class="card-foot">ดูคำอธิบายรายฟิลด์ที่ <a href="data-dictionary.html">พจนานุกรมข้อมูล</a></div>
+      </div>
+      <div class="card"><div class="card-head"><h2>ข้อจำกัดที่บังคับตามข้อกำหนดงาน</h2></div>
+        <div class="card-body" style="padding-top:12px">
+<pre class="code"><span class="c">-- รหัสรายการไม่ซ้ำทั้งชั้นข้อมูล</span>
+<span class="k">CREATE UNIQUE INDEX</span> uq_road_code <span class="k">ON</span> gis.road (feature_code);
+
+<span class="c">-- วันที่สำรวจต้องไม่เป็นอนาคต</span>
+<span class="k">CHECK</span> (surveyed_on &lt;= <span class="k">CURRENT_DATE</span>)
+
+<span class="c">-- ต้องระบุเจ้าของ หรือยอมรับเฉพาะเมื่อสถานะยังไม่ยืนยัน</span>
+<span class="k">CHECK</span> (owner_agency_id <span class="k">IS NOT NULL</span>
+    <span class="k">OR</span> confirm_status_code <span class="k">IN</span> (<span class="s">'pending'</span>,<span class="s">'conflict'</span>,<span class="s">'unknown'</span>))
+
+<span class="c">-- ชั้นข้อมูล CCTV ต้องไม่อยู่ในชุดเผยแพร่</span>
+<span class="k">CHECK</span> (is_public = <span class="k">false</span>)
+<span class="k">CHECK</span> (sensitivity_code <span class="k">IN</span> (<span class="s">'confidential'</span>,<span class="s">'restricted'</span>))</pre>
+        </div></div>
+    </div>
+  </div>
+</div>
+
+<div class="tabpanel" data-panel="e" hidden>
+  <div class="card mb16">
+    <div class="card-head"><h2>ผังความสัมพันธ์ตารางหลัก</h2><span class="spacer"></span>
+      <span class="hint">ภาพที่ 4 — ERD ของชั้นข้อมูลโครงสร้างพื้นฐานและการกำกับดูแล</span></div>
+    <div class="card-body">
+      <div class="erd-scroll">${ERD}</div>
+      <div class="legend mt16">
+        <span class="li"><span class="sw" style="background:var(--b500)"></span>สคีมา gis — ชั้นข้อมูลเชิงพื้นที่</span>
+        <span class="li"><span class="sw" style="background:var(--s3)"></span>สคีมา ref — ทะเบียนและค่าอ้างอิง</span>
+        <span class="li"><span class="sw" style="background:var(--s7)"></span>สคีมา app — ผู้ใช้งานและไฟล์แนบ</span>
+        <span class="li"><span class="sw" style="background:var(--ink-3)"></span>สคีมา audit / qc — การกำกับคุณภาพ</span>
+      </div>
+      <p class="small muted mt16" style="margin-bottom:0">ชั้นข้อมูล L05–L10 ใช้รูปแบบเดียวกับ L01–L04
+        คือมีชุดฟิลด์มาตรฐานครบ เชื่อมกับ <code>ref.agency</code> และ <code>ref.layer_registry</code>
+        และมี trigger บันทึกประวัติลง <code>audit.change_log</code> เหมือนกันทุกตาราง</p>
+    </div>
+  </div>
+  <div class="grid g2">
+    <div class="card"><div class="card-head"><h2>ความสัมพันธ์สำคัญ</h2></div>
+      <div class="table-wrap"><table class="tbl compact">
+        <thead><tr><th>จาก</th><th>ไป</th><th>ความสัมพันธ์</th><th>ความหมาย</th></tr></thead>
+        <tbody>
+          <tr><td class="mono small">ref.agency</td><td class="mono small">gis.road.owner_agency_id</td><td>1 : N</td>
+            <td class="small">หน่วยงานเป็นเจ้าของทรัพย์สินได้หลายรายการ</td></tr>
+          <tr><td class="mono small">ref.agency</td><td class="mono small">gis.road.maintainer_agency_id</td><td>1 : N</td>
+            <td class="small">ผู้บำรุงรักษาแยกจากเจ้าของได้</td></tr>
+          <tr><td class="mono small">gis.road</td><td class="mono small">gis.street_light.road_uid</td><td>1 : N</td>
+            <td class="small">ไฟส่องสว่างผูกกับถนนที่ติดตั้ง</td></tr>
+          <tr><td class="mono small">gis.road</td><td class="mono small">gis.cctv / gis.bridge</td><td>1 : N</td>
+            <td class="small">ทรัพย์สินอื่นอ้างอิงถนนเดียวกัน</td></tr>
+          <tr><td class="mono small">gis.admin_boundary</td><td class="mono small">gis.boundary_discrepancy</td><td>2 : 1</td>
+            <td class="small">พื้นที่คลาดเคลื่อน 1 รายการอ้างแนวเขต 2 แหล่ง</td></tr>
+          <tr><td class="mono small">gis.land_parcel</td><td class="mono small">gis.building.parcel_uid</td><td>1 : N</td>
+            <td class="small">เชื่อมชั้นข้อมูลเดิม 2 ชั้นเข้าด้วยกัน</td></tr>
+          <tr><td class="mono small">ทุกตารางใน gis</td><td class="mono small">audit.change_log</td><td>1 : N</td>
+            <td class="small">trigger บันทึกทุกการเปลี่ยนแปลงระดับแถว</td></tr>
+          <tr><td class="mono small">ทุกตารางใน gis</td><td class="mono small">app.attachment</td><td>1 : N</td>
+            <td class="small">ภาพถ่ายและไฟล์หลักฐานของรายการ</td></tr>
+          <tr><td class="mono small">app.user_account</td><td class="mono small">app.user_layer_scope</td><td>1 : N</td>
+            <td class="small">ขอบเขตชั้นข้อมูลและพื้นที่ของผู้ใช้แต่ละคน</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+    <div class="card"><div class="card-head"><h2>เหตุผลของทางเลือกการออกแบบ</h2></div>
+      <div class="card-body">
+        <details class="acc" open><summary>ทำไมไม่ใช้ตารางเดียวเก็บทุกชั้นข้อมูล</summary>
+          <div class="acc-body small">ตารางเดียวแบบ key-value ยืดหยุ่นกว่าแต่ตรวจค่าไม่ได้ที่ระดับฐานข้อมูล
+            และทำดัชนีเชิงพื้นที่แยกตามประเภทรูปทรงไม่ได้ เมื่อขอบเขตงานกำหนดให้ตรวจความครบถ้วนของฟิลด์บังคับ
+            การใช้ตารางแยกพร้อมชุดฟิลด์มาตรฐานจึงตรวจสอบได้แน่นอนกว่า</div></details>
+        <details class="acc"><summary>ทำไมเก็บรูปทรงใน EPSG:4326 ไม่ใช่ UTM</summary>
+          <div class="acc-body small">บริการแผนที่บนเว็บและมือถือ มาตรฐาน OGC และ GeoJSON ใช้ 4326 เป็นค่าตั้งต้น
+            การเก็บด้วย 4326 จึงลดการแปลงพิกัดในการใช้งานประจำวัน
+            ส่วนการคำนวณระยะและพื้นที่ใช้ชนิด geography หรือแปลงเป็น EPSG:32647 เฉพาะตอนคำนวณ
+            ซึ่งให้ค่าถูกต้องเท่ากัน</div></details>
+        <details class="acc"><summary>ทำไมแยกตารางแหล่งน้ำเป็น 3 ตาราง</summary>
+          <div class="acc-body small">ชั้นข้อมูลแหล่งน้ำและระบบประปาประกอบด้วยรูปทรงสามแบบ
+            (จุดผลิต/จ่ายน้ำ แนวท่อ และแหล่งน้ำ) PostGIS กำหนดประเภทรูปทรงต่อคอลัมน์
+            การแยกตารางทำให้สร้างดัชนีและตรวจความถูกต้องของรูปทรงได้ตรงประเภท
+            แต่ยังนับเป็นชั้นข้อมูลเดียวในทะเบียนและในการส่งมอบ</div></details>
+        <details class="acc"><summary>ทำไมบันทึกประวัติด้วย trigger ไม่ใช่โค้ดฝั่งแอปพลิเคชัน</summary>
+          <div class="acc-body small">ข้อกำหนดให้เจ้าหน้าที่แก้ไขข้อมูลผ่าน QGIS ได้ด้วย
+            การบันทึกในโค้ดแอปพลิเคชันจะพลาดการแก้ไขที่เข้ามาทางอื่น
+            trigger ระดับฐานข้อมูลครอบคลุมทุกช่องทางโดยไม่มีข้อยกเว้น</div></details>
+        <details class="acc"><summary>ทำไมไม่เก็บชื่อเจ้าของที่ดินในชั้นข้อมูลเชิงพื้นที่</summary>
+          <div class="acc-body small">ชื่อและที่อยู่เป็นข้อมูลส่วนบุคคลตาม พ.ร.บ.คุ้มครองข้อมูลส่วนบุคคล
+            การแยกไว้ในระบบทะเบียนภาษีและเชื่อมด้วยรหัสอ้างอิง ทำให้ชุดข้อมูลเชิงพื้นที่เผยแพร่ได้
+            โดยไม่ต้องตัดฟิลด์ทีละครั้ง และลดความเสี่ยงการรั่วไหล</div></details>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="tabpanel" data-panel="s" hidden>
+  <div class="card mb16">
+    <div class="card-head"><h2>แผนผังสคีมา</h2><span class="spacer"></span>
+      <span class="hint">ภาพที่ 5 — ตารางทั้งหมดจำแนกตามสคีมา</span></div>
+    <div class="card-body"><div id="schemaMap"></div></div>
+  </div>
+  <div class="grid g2">
+    <div class="card">
+      <div class="card-head"><h2>ตารางเชิงพื้นที่ (สคีมา gis)</h2></div>
+      <div class="table-wrap"><table class="tbl compact">
+        <thead><tr><th>ตาราง</th><th>ชั้นข้อมูล</th><th>ประเภทรูปทรง</th><th class="num">จำนวนโดยประมาณ</th></tr></thead>
+        <tbody>${LAYERS.map(l => `<tr><td class="mono small">${l.table.split(' / ')[0]}</td>
+          <td class="small"><b>${l.code}</b> ${l.name}</td><td class="small">${l.geom}</td>
+          <td class="num">${fmt(l.count)}</td></tr>`).join('')}</tbody>
+      </table></div>
+    </div>
+    <div class="card">
+      <div class="card-head"><h2>ตารางระบบ</h2></div>
+      <div class="table-wrap" style="max-height:470px;overflow-y:auto"><table class="tbl compact">
+        <thead><tr><th>สคีมา</th><th>ตาราง</th><th>หน้าที่</th><th class="num">แถว</th></tr></thead>
+        <tbody>${SYS_TABLES.map(t => `<tr><td class="mono small">${t.s}</td>
+          <td class="mono small"><b>${t.t}</b></td><td class="small">${t.d}</td>
+          <td class="num small">${t.rows}</td></tr>`).join('')}</tbody>
+      </table></div>
+    </div>
+  </div>
+</div>
+
+<div class="tabpanel" data-panel="i" hidden>
+  <div class="grid g2">
+    <div class="card">
+      <div class="card-head"><h2>ดัชนีที่สร้าง</h2></div>
+      <div class="table-wrap"><table class="tbl compact">
+        <thead><tr><th>ดัชนี</th><th>ชนิด</th><th>คอลัมน์</th><th>ใช้กับคำถามใด</th></tr></thead>
+        <tbody>
+          <tr><td class="mono small">idx_*_geom</td><td>GIST</td><td class="mono small">geom</td>
+            <td class="small">ค้นหาในกรอบแผนที่ สร้าง vector tile วิเคราะห์การตัดกัน</td></tr>
+          <tr><td class="mono small">uq_*_code</td><td>B-tree UNIQUE</td><td class="mono small">feature_code</td>
+            <td class="small">บังคับรหัสรายการไม่ซ้ำ และค้นด้วยรหัสโดยตรง</td></tr>
+          <tr><td class="mono small">idx_road_owner</td><td>B-tree</td><td class="mono small">owner_agency_id, confirm_status_code</td>
+            <td class="small">สรุปทรัพย์สินรายหน่วยงาน และกรองรายการรอยืนยัน</td></tr>
+          <tr><td class="mono small">idx_road_status</td><td>B-tree บางส่วน</td><td class="mono small">record_status_code</td>
+            <td class="small">คิวตรวจสอบ ไม่รวมรายการที่ยกเลิกใช้งาน</td></tr>
+          <tr><td class="mono small">idx_road_name_tg</td><td>GIN (trigram)</td><td class="mono small">name_th</td>
+            <td class="small">ค้นชื่อถนนภาษาไทยแบบคล้ายคลึง พิมพ์ผิดเล็กน้อยยังหาเจอ</td></tr>
+          <tr><td class="mono small">idx_light_road</td><td>B-tree</td><td class="mono small">road_uid</td>
+            <td class="small">ดึงทรัพย์สินทั้งหมดบนถนนสายที่เลือก</td></tr>
+          <tr><td class="mono small">idx_changelog_record</td><td>B-tree</td><td class="mono small">table_name, record_pk</td>
+            <td class="small">เปิดประวัติการแก้ไขของรายการเดียว</td></tr>
+          <tr><td class="mono small">idx_finding_open</td><td>B-tree บางส่วน</td><td class="mono small">state, severity</td>
+            <td class="small">รายการข้อค้นพบที่ยังไม่แก้ไข</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+    <div class="card">
+      <div class="card-head"><h2>แนวทางด้านประสิทธิภาพ</h2></div>
+      <div class="card-body">
+        <ul style="padding-left:18px;margin:0;font-size:.86rem">
+          <li class="mb8"><b>ส่งข้อมูลแผนที่เป็น Vector Tile</b> — <code>ST_AsMVT</code> ตัดข้อมูลตามกรอบไทล์
+            ทำให้ชั้นข้อมูล 18,420 แปลงเปิดบนมือถือได้โดยไม่ต้องโหลดทั้งชั้น</li>
+          <li class="mb8"><b>ลดรายละเอียดรูปทรงตามระดับการซูม</b> — <code>ST_Simplify</code> ที่ระดับซูมต่ำ
+            ลดขนาดไทล์โดยไม่กระทบการอ่านแผนที่</li>
+          <li class="mb8"><b>แคชไทล์</b> — ไทล์ของชั้นข้อมูลที่เปลี่ยนไม่บ่อย (แปลงที่ดิน อาคาร)
+            แคชไว้และล้างแคชเฉพาะไทล์ที่ครอบคลุมพื้นที่ที่มีการแก้ไข</li>
+          <li class="mb8"><b>คำนวณเชิงพื้นที่ในฐานข้อมูล</b> — ส่งเงื่อนไขไปให้ PostGIS คำนวณ
+            ไม่ดึงข้อมูลขึ้นมาวนลูปฝั่งแอปพลิเคชัน</li>
+          <li class="mb8"><b>แบ่งหน้าแบบ keyset</b> — ใช้ <code>WHERE (updated_at, feature_uid) &lt; (…)</code>
+            แทน <code>OFFSET</code> เพื่อให้หน้าท้าย ๆ ของตารางยังเร็ว</li>
+          <li class="mb8"><b>มุมมองสรุปแบบ materialized</b> — ตัวเลขหน้าแดชบอร์ดคำนวณล่วงหน้า
+            และรีเฟรชทุก 15 นาที หรือเมื่อมีการอนุมัติข้อมูล</li>
+          <li><b>แยกฐานข้อมูลสำหรับอ่าน</b> — เมื่อผู้ใช้งานพร้อมกันเกิน 50 ราย
+            ใช้ replica สำหรับงานอ่านและรายงาน แยกจากฐานข้อมูลที่รับการแก้ไข</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="tabpanel" data-panel="q" hidden>
+  <div class="grid g2">
+    <div class="card"><div class="card-head"><h2>สร้างตารางด้วยชุดฟิลด์มาตรฐาน</h2></div>
+      <div class="card-body" style="padding-top:12px">
+<pre class="code dark"><span class="k">CREATE TABLE</span> gis.street_light (
+  light_type_code   <span class="t">varchar</span>(16) <span class="k">NOT NULL</span>,
+  wattage           <span class="t">smallint</span> <span class="k">CHECK</span> (wattage <span class="k">BETWEEN</span> <span class="n">1</span> <span class="k">AND</span> <span class="n">2000</span>),
+  status_code       <span class="t">varchar</span>(16) <span class="k">NOT NULL</span>,
+  road_uid          <span class="t">uuid</span> <span class="k">REFERENCES</span> gis.road(feature_uid),
+  chainage_m        <span class="t">numeric</span>(10,2),
+  geom              <span class="t">geometry</span>(Point, <span class="n">4326</span>) <span class="k">NOT NULL</span>
+);
+
+<span class="c">-- เติมชุดฟิลด์มาตรฐาน 21 ฟิลด์ ดัชนี และข้อจำกัดให้อัตโนมัติ</span>
+<span class="k">SELECT</span> gis.add_core_columns(<span class="s">'gis.street_light'</span>);
+<span class="k">CREATE INDEX</span> idx_light_geom <span class="k">ON</span> gis.street_light <span class="k">USING</span> GIST (geom);</pre>
+      </div></div>
+
+    <div class="card"><div class="card-head"><h2>ทรัพย์สินที่อยู่ห่างแนวถนนเกินเกณฑ์ (กฎ QC-07)</h2></div>
+      <div class="card-body" style="padding-top:12px">
+<pre class="code dark"><span class="k">SELECT</span> l.feature_code, r.feature_code <span class="k">AS</span> road_code,
+       <span class="k">round</span>(<span class="t">ST_Distance</span>(l.geom::<span class="t">geography</span>,
+                       r.geom::<span class="t">geography</span>)::<span class="t">numeric</span>, 1) <span class="k">AS</span> dist_m
+<span class="k">FROM</span>   gis.street_light l
+<span class="k">JOIN</span>   gis.road r <span class="k">ON</span> r.feature_uid = l.road_uid
+<span class="k">WHERE</span>  <span class="k">NOT</span> <span class="t">ST_DWithin</span>(l.geom::<span class="t">geography</span>,
+                        r.geom::<span class="t">geography</span>, <span class="n">25</span>)
+<span class="k">ORDER BY</span> dist_m <span class="k">DESC</span>;</pre>
+      </div></div>
+
+    <div class="card"><div class="card-head"><h2>พื้นที่คลาดเคลื่อนของแนวเขต</h2></div>
+      <div class="card-body" style="padding-top:12px">
+<pre class="code dark"><span class="k">SELECT</span> d.feature_code,
+       <span class="k">round</span>(d.area_rai, 2) <span class="k">AS</span> area_rai,
+       <span class="k">count</span>(<span class="k">DISTINCT</span> p.feature_uid) <span class="k">AS</span> parcel_count,
+       <span class="k">count</span>(<span class="k">DISTINCT</span> b.feature_uid) <span class="k">AS</span> building_count
+<span class="k">FROM</span>   gis.boundary_discrepancy d
+<span class="k">LEFT JOIN</span> gis.land_parcel p <span class="k">ON</span> <span class="t">ST_Intersects</span>(p.geom, d.geom)
+<span class="k">LEFT JOIN</span> gis.building    b <span class="k">ON</span> <span class="t">ST_Intersects</span>(b.geom, d.geom)
+<span class="k">GROUP BY</span> d.feature_code, d.area_rai
+<span class="k">ORDER BY</span> d.area_rai <span class="k">DESC</span>;</pre>
+      </div></div>
+
+    <div class="card"><div class="card-head"><h2>Vector tile สำหรับแสดงผลบนเว็บและมือถือ</h2></div>
+      <div class="card-body" style="padding-top:12px">
+<pre class="code dark"><span class="k">SELECT</span> <span class="t">ST_AsMVT</span>(t, <span class="s">'road'</span>, <span class="n">4096</span>, <span class="s">'geom'</span>)
+<span class="k">FROM</span> (
+  <span class="k">SELECT</span> feature_code, name_th, road_class_code, surface_code,
+         <span class="t">ST_AsMVTGeom</span>(
+           <span class="t">ST_Transform</span>(geom, <span class="n">3857</span>),
+           <span class="t">ST_TileEnvelope</span>(:z, :x, :y), <span class="n">4096</span>, <span class="n">64</span>, <span class="k">true</span>) <span class="k">AS</span> geom
+  <span class="k">FROM</span>   gis.road
+  <span class="k">WHERE</span>  geom &amp;&amp; <span class="t">ST_Transform</span>(<span class="t">ST_TileEnvelope</span>(:z, :x, :y), <span class="n">4326</span>)
+    <span class="k">AND</span>  record_status_code = <span class="s">'approved'</span>
+) t;</pre>
+      </div></div>
+  </div>
+</div>
+`;
+
+initTabs();
+
+/* schema map */
+let sx = 0, html = '';
+const colW = 232, gap = 14;
+const perRow = 3;
+SCHEMAS.forEach((s, i) => {
+  const col = i % perRow, row = Math.floor(i / perRow);
+  html += `<div style="border:1px solid var(--line);border-radius:var(--r-md);padding:12px 13px;background:var(--surface-2)">
+    <div class="row row-tight" style="margin-bottom:3px">
+      <span style="width:9px;height:9px;border-radius:2px;background:${s.c}"></span>
+      <b class="mono" style="font-size:.86rem">${s.n}</b>
+      <span class="badge badge-outline">${s.t.length} ตาราง</span></div>
+    <div class="xsmall muted mb8">${s.d}</div>
+    <div style="display:flex;flex-wrap:wrap;gap:5px">
+      ${s.t.map(t => `<span class="mono" style="font-size:.7rem;background:var(--surface-1);
+        border:1px solid var(--line);border-radius:4px;padding:2px 6px">${t}</span>`).join('')}
+    </div></div>`;
+});
+document.getElementById('schemaMap').innerHTML =
+  `<div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px">${html}</div>`;
+</script>
+</body>
+</html>

@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>พจนานุกรมข้อมูล — GeoCore GIS</title>
+<link rel="icon" href="assets/img/favicon.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/app.css">
+<style>
+  .jump { position: sticky; top: calc(var(--topbar-h) + 10px); align-self: start; }
+  .jump a { display: block; padding: 5px 9px; border-radius: var(--r-sm); font-size: .8rem; color: var(--ink-2); }
+  .jump a:hover { background: var(--surface-2); color: var(--ink-1); text-decoration: none; }
+  .anchor { scroll-margin-top: calc(var(--topbar-h) + 16px); }
+</style>
+</head>
+<body>
+<main class="content"><div class="content-inner" id="root"></div></main>
+
+<script src="assets/js/data.js"></script>
+<script src="assets/js/shell.js"></script>
+<script>
+renderShell('data-dictionary.html');
+const root = document.getElementById('root');
+
+const dictTable = (fields, showEx) => `
+<div class="table-wrap">
+  <table class="tbl compact">
+    <thead><tr><th style="width:190px">ชื่อฟิลด์</th><th style="width:150px">ชนิดข้อมูล</th>
+      <th style="width:190px">ข้อจำกัด / ค่าตั้งต้น</th><th>คำอธิบาย</th>${showEx ? '<th style="width:150px">ตัวอย่าง</th>' : ''}</tr></thead>
+    <tbody>${fields.map(f => `<tr>
+      <td class="mono small"><b>${f.f}</b></td>
+      <td class="mono small">${f.t}</td>
+      <td class="small">${f.n || '—'}</td>
+      <td class="small">${f.d}</td>
+      ${showEx ? `<td class="mono small muted">${f.ex || '—'}</td>` : ''}</tr>`).join('')}</tbody>
+  </table>
+</div>`;
+
+root.innerHTML = `
+${pageHead({
+  crumbs: ['<a href="index.html">หน้าแรก</a>', 'พจนานุกรมข้อมูล'],
+  title: 'พจนานุกรมข้อมูล (Data Dictionary)',
+  badge: badge('10 ชั้นข้อมูล · 21 ฟิลด์มาตรฐาน', 'info'),
+  sub: 'คำอธิบายทุกฟิลด์ของทุกชั้นข้อมูล พร้อมชนิดข้อมูล ข้อจำกัด และตัวอย่างค่า — ส่งมอบคู่กับฐานข้อมูลตามข้อกำหนด',
+  actions: `<button class="btn" id="btnXlsx">${icon('download')} ส่งออก XLSX</button>
+            <button class="btn" onclick="window.print()">${icon('file')} พิมพ์</button>`
+})}
+
+<div class="notice notice-info mb16">${icon('info')}<div>
+  <strong>โครงสร้างของพจนานุกรมข้อมูล</strong>
+  ทุกชั้นข้อมูลใช้ <b>ชุดฟิลด์มาตรฐาน 21 ฟิลด์</b> ร่วมกัน (ส่วนที่ 1) แล้วจึงมี<b>ฟิลด์เฉพาะของแต่ละชั้นข้อมูล</b> (ส่วนที่ 2)
+  การออกแบบเช่นนี้ทำให้ทุกรายการในระบบมีรหัสไม่ซ้ำ แหล่งข้อมูล วันที่สำรวจ หน่วยงานรับผิดชอบ และคำอธิบายข้อมูลครบถ้วนเสมอ
+  ตามที่ข้อกำหนดขอบเขตของงานระบุ</div></div>
+
+<div class="grid g-1-2" style="grid-template-columns:200px minmax(0,1fr);gap:20px">
+  <nav class="jump card" aria-label="สารบัญ">
+    <div class="card-body" style="padding:10px">
+      <div class="nav-label" style="padding:0 9px 6px">สารบัญ</div>
+      <a href="#core">ชุดฟิลด์มาตรฐาน</a>
+      <a href="#domains">ตารางค่าอ้างอิง</a>
+      <div class="nav-label" style="padding:12px 9px 6px">ฟิลด์เฉพาะรายชั้นข้อมูล</div>
+      ${DICT.map(d => {
+        const l = LAYERS.find(x => x.code === d.code);
+        return `<a href="#${d.code}">${d.code} · ${l.name}</a>`;
+      }).join('')}
+    </div>
+  </nav>
+
+  <div class="stack">
+    <div class="card anchor" id="core">
+      <div class="card-head"><h2>ส่วนที่ 1 — ชุดฟิลด์มาตรฐาน (ใช้กับทุกชั้นข้อมูล)</h2>
+        <span class="spacer"></span><span class="badge badge-info">21 ฟิลด์</span></div>
+      ${dictTable(CORE_FIELDS, true)}
+      <div class="card-foot">ฟิลด์เหล่านี้สร้างอัตโนมัติด้วยฟังก์ชัน <code>gis.add_core_columns()</code>
+        จึงไม่มีทางที่ชั้นข้อมูลใดจะขาดฟิลด์บังคับไป</div>
+    </div>
+
+    <div class="card anchor" id="domains">
+      <div class="card-head"><h2>ตารางค่าอ้างอิง (Code domains)</h2>
+        <span class="spacer"></span><span class="hint">ค่ารหัสทั้งหมดอยู่ใน <code>ref.code_domain</code></span></div>
+      <div class="table-wrap">
+        <table class="tbl compact">
+          <thead><tr><th style="width:180px">โดเมน</th><th>ค่าที่ใช้ได้</th><th style="width:150px">ใช้กับฟิลด์</th></tr></thead>
+          <tbody id="domRows"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div id="layerDicts"></div>
+  </div>
+</div>
+`;
+
+const DOMAINS = [
+  ['confirm_status', [['confirmed', 'ยืนยันแล้ว'], ['pending', 'รอยืนยัน'], ['conflict', 'ข้อมูลขัดแย้ง'], ['unknown', 'ไม่ทราบ']], 'confirm_status_code'],
+  ['record_status', [['draft', 'ร่าง'], ['submitted', 'ส่งตรวจสอบ'], ['approved', 'อนุมัติแล้ว'], ['rejected', 'ตีกลับ'], ['retired', 'ยกเลิกใช้งาน']], 'record_status_code'],
+  ['sensitivity', [['public', 'เผยแพร่ได้'], ['internal', 'ใช้ภายใน'], ['confidential', 'เฉพาะผู้ได้รับสิทธิ์'], ['restricted', 'เฉพาะรายชื่อที่กำหนด']], 'sensitivity_code'],
+  ['source_type', [['field_survey', 'สำรวจภาคสนาม'], ['aerial', 'ดิจิไทซ์จากภาพถ่ายทางอากาศ'], ['agency_doc', 'เอกสาร/ทะเบียนหน่วยงาน'], ['citizen_report', 'แจ้งเหตุจากประชาชน'], ['legacy', 'ชั้นข้อมูลเดิม']], 'source_type_code'],
+  ['road_class', [['highway', 'ทางหลวง'], ['main', 'ถนนสายหลัก'], ['secondary', 'ถนนสายรอง'], ['soi', 'ซอย'], ['farm_road', 'ถนนเข้าพื้นที่เกษตร']], 'road_class_code'],
+  ['road_surface', [['concrete', 'คอนกรีตเสริมเหล็ก'], ['asphalt', 'ลาดยางแอสฟัลต์'], ['laterite', 'ลูกรัง'], ['earth', 'ดินบดอัด'], ['paving_block', 'บล็อกปูทาง']], 'surface_code'],
+  ['asset_condition', [['good', 'ดี'], ['fair', 'พอใช้'], ['poor', 'ชำรุดบางส่วน'], ['needs_repair', 'ต้องซ่อม'], ['unsafe', 'เสี่ยงต่อการใช้งาน']], 'condition_code'],
+  ['light_type', [['led', 'โคมไฟ LED'], ['hps', 'โคมไฟ HPS'], ['solar', 'โคมไฟโซลาร์เซลล์'], ['fluorescent', 'โคมไฟฟลูออเรสเซนต์']], 'light_type_code'],
+  ['asset_status', [['active', 'ใช้งานได้'], ['damaged', 'ชำรุด'], ['pending_repair', 'รอซ่อม'], ['offline', 'ออฟไลน์'], ['removed', 'ถอดออกแล้ว']], 'status_code'],
+  ['camera_type', [['fixed', 'กล้องมุมคงที่'], ['ptz', 'กล้องหมุนส่าย'], ['dome', 'กล้องโดม'], ['anpr', 'กล้องอ่านป้ายทะเบียน']], 'camera_type_code'],
+  ['bridge_structure', [['rc_slab', 'คอนกรีตเสริมเหล็กแบบพื้น'], ['rc_girder', 'คอนกรีตเสริมเหล็กแบบคาน'], ['box_culvert', 'ท่อเหลี่ยม'], ['steel', 'โครงเหล็ก'], ['timber', 'ไม้']], 'structure_code'],
+  ['water_facility_type', [['intake', 'จุดรับน้ำดิบ'], ['treatment', 'โรงกรองน้ำ'], ['pump', 'สถานีสูบน้ำ'], ['tank', 'ถังเก็บน้ำ'], ['standpipe', 'จุดจ่ายน้ำ'], ['well', 'บ่อบาดาล']], 'facility_type_code'],
+  ['drain_issue_type', [['flooding', 'น้ำท่วมขัง'], ['wastewater', 'น้ำเสียระบายลงแหล่งน้ำ'], ['blockage', 'ทางระบายน้ำอุดตัน'], ['odor', 'กลิ่นเหม็น'], ['erosion', 'ตลิ่งทรุด']], 'issue_type_code'],
+  ['severity', [['low', 'ต่ำ'], ['medium', 'ปานกลาง'], ['high', 'สูง'], ['critical', 'วิกฤต']], 'severity_code'],
+  ['public_space_type', [['park', 'สวนสาธารณะ'], ['sport_field', 'ลานกีฬา'], ['temple_ground', 'ลานวัด'], ['market', 'ตลาดชุมชน'], ['learning_center', 'ศูนย์การเรียนรู้'], ['green_area', 'พื้นที่สีเขียว']], 'space_type_code'],
+  ['discrepancy_type', [['overlap', 'พื้นที่ซ้อนทับ'], ['gap', 'พื้นที่ขาด'], ['misalignment', 'แนวเขตไม่ตรงกัน']], 'discrepancy_type_code']
+];
+
+document.getElementById('domRows').innerHTML = DOMAINS.map(d => `<tr>
+  <td class="mono small"><b>${d[0]}</b></td>
+  <td><div style="display:flex;flex-wrap:wrap;gap:5px">${d[1].map(v =>
+    `<span class="badge badge-outline"><code>${v[0]}</code> ${v[1]}</span>`).join('')}</div></td>
+  <td class="mono small">${d[2]}</td></tr>`).join('');
+
+document.getElementById('layerDicts').innerHTML = DICT.map(d => {
+  const l = LAYERS.find(x => x.code === d.code);
+  return `<div class="card anchor mb16" id="${d.code}">
+    <div class="card-head">
+      ${symbolSwatch(l)}
+      <h2>${d.code} · ${l.name}</h2>
+      <span class="spacer"></span>
+      <span class="badge badge-outline">${d.fields.length} ฟิลด์เฉพาะ</span>
+      <span class="badge ${STATUS_LABEL[l.status].c}">${STATUS_LABEL[l.status].t}</span></div>
+    <div class="card-body" style="padding-bottom:0">
+      <dl class="kv" style="grid-template-columns:130px 1fr;margin-bottom:10px">
+        <dt>ตาราง</dt><dd class="mono">${d.table}</dd>
+        <dt>ประเภทรูปทรง</dt><dd>${d.geom}</dd>
+        <dt>คีย์หลัก</dt><dd class="mono">${d.pk}</dd>
+        <dt>จำนวนรายการ</dt><dd>${fmt(l.count)} · ${l.qty}</dd>
+        <dt>แหล่งที่มา</dt><dd>${l.src}</dd>
+      </dl>
+      ${d.note ? `<div class="notice ${d.code === 'L03' ? 'notice-crit' : 'notice-info'}" style="margin-bottom:12px">
+        ${icon(d.code === 'L03' ? 'warn' : 'info')}<div>${d.note}</div></div>` : ''}
+      <p class="small" style="font-weight:600;margin-bottom:6px">ฟิลด์เฉพาะของชั้นข้อมูลนี้
+        <span class="muted" style="font-weight:400">(เพิ่มจากชุดฟิลด์มาตรฐาน 21 ฟิลด์)</span></p>
+    </div>
+    ${dictTable(d.fields, true)}
+  </div>`;
+}).join('');
+
+document.getElementById('btnXlsx').onclick = () =>
+  toast('ส่งออกพจนานุกรมข้อมูลเป็น XLSX — 1 แผ่นงานต่อ 1 ชั้นข้อมูล พร้อมแผ่นงานค่าอ้างอิง', 'download');
+</script>
+</body>
+</html>

@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>เข้าสู่ระบบ — GeoCore GIS</title>
+<link rel="icon" href="assets/img/favicon.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/app.css">
+<style>
+  body { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); min-height: 100vh; }
+  .side {
+    background:
+      radial-gradient(900px 420px at 18% 8%, rgba(42,120,214,.22), transparent 62%),
+      radial-gradient(700px 400px at 88% 92%, rgba(27,175,122,.18), transparent 62%),
+      #10294a;
+    color: #e8eef7; padding: 48px 44px; display: flex; flex-direction: column; position: relative; overflow: hidden;
+  }
+  .side .grid-bg { position: absolute; inset: 0; opacity: .20;
+    background-image: linear-gradient(rgba(255,255,255,.3) 1px, transparent 1px),
+                      linear-gradient(90deg, rgba(255,255,255,.3) 1px, transparent 1px);
+    background-size: 54px 54px; }
+  .side > * { position: relative; }
+  .side h1 { font-size: 1.85rem; letter-spacing: -.03em; margin-bottom: 12px; }
+  .side p { color: #b9c9de; max-width: 46ch; }
+  .side .pts { margin-top: auto; display: grid; gap: 12px; }
+  .side .pt { display: flex; gap: 11px; align-items: flex-start; font-size: .88rem; }
+  .side .pt svg { width: 18px; height: 18px; flex: 0 0 18px; margin-top: 2px; color: #7fb4f2; }
+  .side .foot { margin-top: 28px; font-size: .74rem; color: #8ca1bd; }
+  .panel { display: grid; place-items: center; padding: 40px 24px; background: var(--plane); }
+  .box { width: min(400px, 100%); }
+  .rolepick { display: grid; gap: 8px; margin-bottom: 18px; }
+  .rolepick label { display: flex; gap: 10px; align-items: flex-start; padding: 11px 12px;
+    border: 1px solid var(--line); border-radius: var(--r-md); cursor: pointer; background: var(--surface-1); }
+  .rolepick label:has(input:checked) { border-color: var(--accent); background: var(--accent-wash); }
+  .rolepick input { margin-top: 3px; accent-color: var(--b500); width: 16px; height: 16px; flex: 0 0 16px; }
+  .divider { display: flex; align-items: center; gap: 12px; margin: 18px 0; color: var(--ink-3); font-size: .76rem; }
+  .divider::before, .divider::after { content: ''; flex: 1; height: 1px; background: var(--line); }
+  @media (max-width: 900px) {
+    body { grid-template-columns: minmax(0,1fr); }
+    .side { padding: 30px 22px; }
+    .side .pts { margin-top: 24px; }
+    .side h1 { font-size: 1.45rem; }
+  }
+</style>
+</head>
+<body>
+
+<section class="side">
+  <div class="grid-bg"></div>
+  <a class="brand" href="index.html" style="color:#fff;margin-bottom:34px">
+    <span class="mark" id="mk"></span>
+    <span class="brand-txt">GeoCore GIS<small style="color:#8ca1bd">Local Government GIS</small></span>
+  </a>
+  <h1>ระบบสารสนเทศภูมิศาสตร์<br>เพื่อการบริหารจัดการพื้นที่</h1>
+  <p>จัดเก็บ ตรวจสอบ และเผยแพร่ชั้นข้อมูลเชิงพื้นที่ขององค์กรไว้ในที่เดียว
+     พร้อมการกำกับคุณภาพข้อมูลและการควบคุมสิทธิ์การเข้าถึง</p>
+  <div class="pts" id="pts"></div>
+  <div class="foot">ข้อมูลตัวอย่างทั้งหมดเป็นข้อมูลสมมุติ · หน้าจอนี้จัดทำเพื่อการนำเสนอโครงการ</div>
+</section>
+
+<section class="panel">
+  <div class="box">
+    <h2 style="font-size:1.25rem;margin-bottom:5px">เข้าสู่ระบบ</h2>
+    <p class="small dim mb16">ใช้บัญชีผู้ใช้ขององค์กร หรือเลือกกลุ่มสิทธิ์เพื่อทดลองใช้หน้าจอตัวอย่าง</p>
+
+    <div class="notice notice-info mb16" id="demoNote"></div>
+
+    <div class="flabel">เลือกกลุ่มสิทธิ์สำหรับการสาธิต</div>
+    <div class="rolepick" id="roles"></div>
+
+    <button class="btn btn-primary btn-block btn-lg" id="go">เข้าสู่ระบบตัวอย่าง</button>
+
+    <div class="divider">หรือเข้าสู่ระบบด้วยบัญชีจริง</div>
+
+    <form onsubmit="return false">
+      <div class="field"><label for="u">ชื่อผู้ใช้หรืออีเมลองค์กร</label>
+        <input type="text" id="u" autocomplete="username" placeholder="name@example.go.th"></div>
+      <div class="field"><label for="p">รหัสผ่าน</label>
+        <input type="password" id="p" autocomplete="current-password" placeholder="อย่างน้อย 12 อักขระ"></div>
+      <div class="row" style="justify-content:space-between;margin-bottom:14px">
+        <label class="check" style="margin:0"><input type="checkbox"><span class="small">จดจำอุปกรณ์นี้ 30 วัน</span></label>
+        <a href="#" class="small" onclick="return false">ลืมรหัสผ่าน</a>
+      </div>
+      <button class="btn btn-block" id="sso">เข้าสู่ระบบด้วยบัญชีองค์กร (SSO)</button>
+    </form>
+
+    <p class="xsmall muted mt16" style="text-align:center">
+      ระบบบังคับการยืนยันสองขั้นตอนสำหรับผู้ดูแลระบบและผู้ใช้งานภายนอก<br>
+      การเข้าสู่ระบบทุกครั้งถูกบันทึกลงบันทึกการใช้งาน</p>
+  </div>
+</section>
+
+<script src="assets/js/data.js"></script>
+<script src="assets/js/shell.js"></script>
+<script>
+document.getElementById('mk').innerHTML = icon('map');
+document.getElementById('pts').innerHTML = [
+  ['layers', 'ชั้นข้อมูล 10 ชั้น พร้อมชุดฟิลด์มาตรฐานเดียวกัน'],
+  ['shield', 'ตรวจคุณภาพข้อมูลอัตโนมัติ 12 กฎก่อนอนุมัติ'],
+  ['mobile', 'สำรวจภาคสนามบนมือถือ ทำงานออฟไลน์ได้'],
+  ['download', 'ส่งออก GeoPackage · QGIS · PDF · XLSX ในชุดเดียว'],
+  ['lock', 'แยกชุดข้อมูลภายในกับชุดเผยแพร่สาธารณะอัตโนมัติ']
+].map(p => `<div class="pt">${icon(p[0])}<span>${p[1]}</span></div>`).join('');
+
+document.getElementById('demoNote').innerHTML = `${icon('info')}<div>
+  กลุ่มสิทธิ์ที่เลือกจะมีผลกับทุกหน้าจอ และสลับได้ตลอดเวลาจากปุ่มมุมขวาบน</div>`;
+
+const cur = currentRole();
+document.getElementById('roles').innerHTML = Object.values(ROLES).map(r => `
+  <label><input type="radio" name="r" value="${r.code}" ${r.code === cur ? 'checked' : ''}>
+    <span>
+      <span style="display:flex;align-items:center;gap:7px;font-weight:650;font-size:.88rem">
+        <span style="width:8px;height:8px;border-radius:50%;background:${r.color}"></span>${r.name}
+        <span class="xsmall muted">${r.en}</span></span>
+      <span class="small dim" style="display:block;margin-top:2px">${r.desc}</span>
+    </span></label>`).join('');
+
+document.getElementById('go').onclick = () => {
+  const v = document.querySelector('input[name=r]:checked').value;
+  localStorage.setItem('geocore.role', v);
+  location.href = v === 'editor' ? 'mobile-survey.html' : 'dashboard.html';
+};
+document.getElementById('sso').onclick = () =>
+  toast('ตัวอย่างหน้าจอ — ระบบจริงจะส่งต่อไปยังหน้าเข้าสู่ระบบของผู้ให้บริการบัญชีองค์กร', 'lock');
+setTheme(localStorage.getItem('geocore.theme') || 'auto');
+</script>
+</body>
+</html>

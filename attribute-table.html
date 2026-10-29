@@ -1,0 +1,270 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ตารางข้อมูล — GeoCore GIS</title>
+<link rel="icon" href="assets/img/favicon.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/app.css">
+</head>
+<body>
+<main class="content"><div class="content-inner" id="root"></div></main>
+
+<script src="assets/js/data.js"></script>
+<script src="assets/js/shell.js"></script>
+<script>
+renderShell('attribute-table.html');
+const root = document.getElementById('root');
+
+root.innerHTML = `
+${pageHead({
+  crumbs: ['<a href="index.html">หน้าแรก</a>', '<a href="layers.html">ทะเบียนชั้นข้อมูล</a>', 'ตารางข้อมูล'],
+  title: 'ตารางข้อมูล',
+  badge: badge('L01 · ถนน', 'info'),
+  sub: 'ค้นหา กรอง เรียง และแก้ไขค่าในตาราง พร้อมส่งออกเฉพาะรายการที่กรองไว้',
+  actions: `<button class="btn" id="btnCols">${icon('filter')} เลือกคอลัมน์</button>
+            <button class="btn" id="btnExport">${icon('download')} ส่งออกผลการกรอง</button>
+            <button class="btn btn-primary" data-need="write" id="btnNew">${icon('plus')} เพิ่มรายการ</button>`
+})}
+
+<div class="ro-banner">${icon('info')}<span>กำลังดูในสิทธิ์ <b>ผู้อ่านข้อมูล</b> — แก้ไขค่าในตารางไม่ได้ แต่ส่งออกข้อมูลที่กรองไว้ได้</span></div>
+
+<div class="card mb16">
+  <div class="card-body" style="padding-bottom:6px">
+    <div class="grid g4" style="gap:10px">
+      <div class="field" style="margin-bottom:10px">
+        <label for="qLayer">ชั้นข้อมูล</label>
+        <select id="qLayer"><option>L01 · ถนน</option><option>L02 · ไฟส่องสว่าง</option></select>
+      </div>
+      <div class="field" style="margin-bottom:10px">
+        <label for="qText">ค้นหา</label>
+        <input type="search" id="qText" placeholder="รหัส หรือ ชื่อรายการ…">
+      </div>
+      <div class="field" style="margin-bottom:10px">
+        <label for="qOwner">เจ้าของทรัพย์สิน</label>
+        <select id="qOwner"><option value="">ทั้งหมด</option></select>
+      </div>
+      <div class="field" style="margin-bottom:10px">
+        <label for="qConfirm">สถานะการยืนยัน</label>
+        <select id="qConfirm">
+          <option value="">ทั้งหมด</option>
+          <option value="confirmed">ยืนยันแล้ว</option>
+          <option value="pending">รอยืนยัน</option>
+          <option value="conflict">ข้อมูลขัดแย้ง</option>
+        </select>
+      </div>
+    </div>
+    <div class="row row-tight" id="chips" style="margin-bottom:10px"></div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-head">
+    <h2 id="cnt">—</h2><span class="spacer"></span>
+    <span class="hint">คลิกหัวคอลัมน์เพื่อเรียงลำดับ</span>
+  </div>
+  <div class="table-wrap">
+    <table class="tbl" id="tbl">
+      <thead><tr>
+        <th style="width:30px" data-need="write"><input type="checkbox" id="chkAll" aria-label="เลือกทั้งหมด"></th>
+        <th data-sort="code">รหัส</th>
+        <th data-sort="name">ชื่อถนน</th>
+        <th data-sort="cls">ชั้นทาง</th>
+        <th data-sort="surf">ผิวทาง</th>
+        <th class="num" data-sort="len">ความยาว (ม.)</th>
+        <th class="num" data-sort="wid">กว้าง (ม.)</th>
+        <th data-sort="cond">สภาพ</th>
+        <th data-sort="owner">เจ้าของ</th>
+        <th data-sort="maint">ผู้บำรุงรักษา</th>
+        <th data-sort="confirm">ยืนยัน</th>
+        <th data-sort="status">สถานะรายการ</th>
+        <th data-sort="date">วันที่สำรวจ</th>
+        <th></th>
+      </tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+  </div>
+  <div class="card-foot row">
+    <span id="sel" class="small">ยังไม่ได้เลือกรายการ</span>
+    <span style="flex:1"></span>
+    <div class="pager">
+      <button class="pg">‹</button>
+      <button class="pg" aria-current="page">1</button>
+      <button class="pg">2</button><button class="pg">3</button>
+      <span class="muted small">… 129</span>
+      <button class="pg">›</button>
+      <select style="width:auto;min-height:28px;padding:2px 24px 2px 8px;font-size:.8rem">
+        <option>10 แถว/หน้า</option><option>25 แถว/หน้า</option><option>50 แถว/หน้า</option></select>
+    </div>
+  </div>
+</div>
+
+<div class="notice notice-info mt16">${icon('info')}<div>
+  <strong>การแยกเจ้าของทรัพย์สินกับผู้บำรุงรักษา</strong>
+  ขอบเขตงานกำหนดให้แยก "เจ้าของทรัพย์สิน" "ผู้บำรุงรักษา" และ "สถานะการยืนยัน" ออกจากกัน
+  เมื่อข้อมูลจากหน่วยงานไม่ตรงกัน ระบบบันทึกเป็นสถานะ <b>ข้อมูลขัดแย้ง</b> พร้อมหลักฐานทั้งสองฝ่าย
+  และไม่อนุญาตให้สรุปจากการสังเกตภาคสนามเพียงอย่างเดียว</div></div>
+`;
+
+/* ขยายข้อมูลตัวอย่างให้ดูเหมือนฐานข้อมูลจริง */
+const DATA = ROADS.slice();
+
+const owners = [...new Set(DATA.map(r => r.owner))];
+document.getElementById('qOwner').innerHTML = '<option value="">ทั้งหมด</option>' +
+  owners.map(o => `<option>${o}</option>`).join('');
+
+let sortKey = 'code', sortAsc = true, selected = new Set();
+
+function filtered() {
+  const q = document.getElementById('qText').value.trim().toLowerCase();
+  const ow = document.getElementById('qOwner').value;
+  const cf = document.getElementById('qConfirm').value;
+  return DATA.filter(r =>
+    (!q || r.code.toLowerCase().includes(q) || r.name.toLowerCase().includes(q)) &&
+    (!ow || r.owner === ow) && (!cf || r.confirm === cf)
+  ).sort((a, b) => {
+    const x = a[sortKey], y = b[sortKey];
+    const v = typeof x === 'number' ? x - y : String(x).localeCompare(String(y), 'th');
+    return sortAsc ? v : -v;
+  });
+}
+
+function paint() {
+  const rows = filtered();
+  document.getElementById('cnt').textContent = `${fmt(rows.length)} รายการ (จากทั้งหมด ${fmt(1284)} รายการในชั้นข้อมูล)`;
+  document.getElementById('rows').innerHTML = rows.map(r => {
+    const cf = CONFIRM_LABEL[r.confirm], st = STATUS_LABEL[r.status];
+    const editable = `<span data-edit data-code="${r.code}" style="border-bottom:1px dashed var(--line-strong);cursor:text">${r.cond}</span>`;
+    return `<tr data-row="${r.code}">
+      <td data-need="write"><input type="checkbox" data-pick="${r.code}" ${selected.has(r.code) ? 'checked' : ''} aria-label="เลือก ${r.code}"></td>
+      <td class="mono"><a href="#" data-open="${r.code}">${r.code}</a></td>
+      <td>${r.name}</td>
+      <td class="small">${r.cls}</td>
+      <td class="small">${r.surf}</td>
+      <td class="num">${fmt(r.len)}</td>
+      <td class="num">${r.wid.toFixed(1)}</td>
+      <td class="small">${editable}</td>
+      <td class="small">${r.owner}</td>
+      <td class="small">${r.maint}${r.owner !== r.maint ? ' <span class="badge badge-outline xsmall">ต่างจากเจ้าของ</span>' : ''}</td>
+      <td><span class="badge ${cf.c}">${cf.t}</span></td>
+      <td><span class="badge ${st.c}">${st.t}</span></td>
+      <td class="small nowrap">${r.date}</td>
+      <td><div class="cell-actions">
+        <button class="btn btn-sm btn-ghost" data-zoom="${r.code}" title="ดูบนแผนที่">${icon('map')}</button>
+        <button class="btn btn-sm btn-ghost" data-need="write" data-edit-row="${r.code}" title="แก้ไข">${icon('pencil')}</button>
+      </div></td></tr>`;
+  }).join('') || `<tr><td colspan="14" class="center muted" style="padding:28px">ไม่พบรายการที่ตรงกับเงื่อนไข</td></tr>`;
+
+  paintChips();
+  bindRows();
+}
+
+function paintChips() {
+  const chips = [];
+  const q = document.getElementById('qText').value.trim();
+  const ow = document.getElementById('qOwner').value;
+  const cf = document.getElementById('qConfirm').value;
+  if (q) chips.push(['qText', 'คำค้น: ' + q]);
+  if (ow) chips.push(['qOwner', 'เจ้าของ: ' + ow]);
+  if (cf) chips.push(['qConfirm', 'ยืนยัน: ' + CONFIRM_LABEL[cf].t]);
+  document.getElementById('chips').innerHTML = chips.length
+    ? chips.map(c => `<button class="chip" aria-pressed="true" data-clear="${c[0]}">${c[1]} <span class="x">×</span></button>`).join('')
+      + `<button class="btn btn-sm btn-ghost" data-clear="all">ล้างตัวกรองทั้งหมด</button>`
+    : '<span class="xsmall muted">ยังไม่ได้ใช้ตัวกรอง — แสดงทุกรายการ</span>';
+  document.querySelectorAll('[data-clear]').forEach(b => b.onclick = () => {
+    if (b.dataset.clear === 'all') { ['qText', 'qOwner', 'qConfirm'].forEach(i => document.getElementById(i).value = ''); }
+    else document.getElementById(b.dataset.clear).value = '';
+    paint();
+  });
+}
+
+function bindRows() {
+  document.querySelectorAll('[data-pick]').forEach(cb => cb.onchange = () => {
+    cb.checked ? selected.add(cb.dataset.pick) : selected.delete(cb.dataset.pick);
+    document.getElementById('sel').textContent = selected.size
+      ? `เลือกไว้ ${selected.size} รายการ — เลือกการทำงานกลุ่มได้จากปุ่มด้านบน` : 'ยังไม่ได้เลือกรายการ';
+  });
+  document.querySelectorAll('[data-open]').forEach(a => a.onclick = e => {
+    e.preventDefault(); openDetail(a.dataset.open);
+  });
+  document.querySelectorAll('[data-zoom]').forEach(b => b.onclick = () => location.href = 'map.html');
+  document.querySelectorAll('[data-edit-row]').forEach(b => b.onclick = () => location.href = 'data-entry.html');
+  document.querySelectorAll('[data-edit]').forEach(s => s.onclick = () => {
+    if (currentRole() === 'viewer') return;
+    const r = DATA.find(x => x.code === s.dataset.code);
+    const sel = document.createElement('select');
+    sel.innerHTML = ['ดี', 'พอใช้', 'ต้องซ่อม'].map(v => `<option ${v === r.cond ? 'selected' : ''}>${v}</option>`).join('');
+    sel.style.minHeight = '26px'; sel.style.fontSize = '.8rem';
+    s.replaceWith(sel); sel.focus();
+    sel.onchange = sel.onblur = () => {
+      r.cond = sel.value;
+      toast(`บันทึก ${r.code}: สภาพ → ${r.cond} (สร้างเวอร์ชันใหม่และบันทึกลง Audit Log)`, 'save');
+      paint();
+    };
+  });
+}
+
+function openDetail(code) {
+  const r = DATA.find(x => x.code === code);
+  modal(`${r.code} — ${r.name}`, `
+    <div class="tabs" data-tabs><button data-tab="a" aria-selected="true">ข้อมูลคุณลักษณะ</button>
+      <button data-tab="b" aria-selected="false">การกำกับข้อมูล</button>
+      <button data-tab="c" aria-selected="false">ประวัติการแก้ไข</button></div>
+    <div class="tabpanel" data-panel="a">
+      <dl class="kv" style="grid-template-columns:140px 1fr">
+        <dt>รหัสรายการ</dt><dd class="mono">${r.code}</dd>
+        <dt>ชั้นทาง</dt><dd>${r.cls}</dd>
+        <dt>ผิวทาง</dt><dd>${r.surf}</dd>
+        <dt>ความยาว</dt><dd>${fmt(r.len)} ม. <span class="muted xsmall">(คำนวณจาก ST_Length)</span></dd>
+        <dt>ความกว้าง</dt><dd>${r.wid.toFixed(1)} ม.</dd>
+        <dt>สภาพ</dt><dd>${r.cond}</dd>
+        <dt>หมู่บ้าน</dt><dd>${r.village}</dd>
+      </dl></div>
+    <div class="tabpanel" data-panel="b" hidden>
+      <dl class="kv" style="grid-template-columns:140px 1fr">
+        <dt>เจ้าของทรัพย์สิน</dt><dd>${r.owner}</dd>
+        <dt>ผู้บำรุงรักษา</dt><dd>${r.maint}</dd>
+        <dt>สถานะการยืนยัน</dt><dd><span class="badge ${CONFIRM_LABEL[r.confirm].c}">${CONFIRM_LABEL[r.confirm].t}</span></dd>
+        <dt>แหล่งข้อมูล</dt><dd>สำรวจภาคสนาม (RTK GNSS) + หนังสือยืนยันจากหน่วยงาน</dd>
+        <dt>วันที่สำรวจ</dt><dd>${r.date}</dd>
+        <dt>ความแม่นยำ</dt><dd>1.2 ม. (เป้าหมาย ≤ 1.5 ม.)</dd>
+        <dt>ชั้นความลับ</dt><dd>Internal — อยู่ในชุดเผยแพร่สาธารณะ (ตัดฟิลด์หมายเหตุกรรมสิทธิ์)</dd>
+      </dl></div>
+    <div class="tabpanel" data-panel="c" hidden>
+      <ul class="tl">
+        <li class="now"><div class="tt">v3 · แก้ไขสภาพผิวทาง</div><div class="td">ธนากร ค. · 21 ต.ค. 2569 — "พอใช้" → "${r.cond}"</div></li>
+        <li class="done"><div class="tt">v2 · อนุมัติรายการ</div><div class="td">ปิยะนุช ส. · 14 ต.ค. 2569</div></li>
+        <li class="done"><div class="tt">v1 · สร้างรายการจากการสำรวจ</div><div class="td">ธนากร ค. · ${r.date}</div></li>
+      </ul></div>`,
+    `<button class="btn" data-close>ปิด</button>
+     <a class="btn" href="map.html">ดูบนแผนที่</a>
+     <a class="btn btn-primary" data-need="write" href="data-entry.html">แก้ไขรายการ</a>`);
+  initTabs();
+}
+
+['qText', 'qOwner', 'qConfirm'].forEach(id => document.getElementById(id).addEventListener('input', paint));
+document.querySelectorAll('[data-sort]').forEach(th => { th.style.cursor = 'pointer'; th.onclick = () => {
+  const k = th.dataset.sort; sortAsc = (sortKey === k) ? !sortAsc : true; sortKey = k; paint();
+};});
+const ca = document.getElementById('chkAll');
+if (ca) ca.onchange = () => {
+  filtered().forEach(r => ca.checked ? selected.add(r.code) : selected.delete(r.code)); paint();
+  document.getElementById('sel').textContent = selected.size ? `เลือกไว้ ${selected.size} รายการ` : 'ยังไม่ได้เลือกรายการ';
+};
+document.getElementById('btnExport').onclick = () => modal('ส่งออกผลการกรอง',
+  `<p class="small dim">ส่งออกเฉพาะ <b>${filtered().length}</b> รายการที่ตรงกับเงื่อนไขปัจจุบัน พร้อมคำอธิบายฟิลด์</p>
+   <label class="check"><input type="radio" name="f" checked><span>Excel (.xlsx) — มีแผ่นงานพจนานุกรมข้อมูลแนบ</span></label>
+   <label class="check"><input type="radio" name="f"><span>CSV (UTF-8 with BOM) — เปิดในภาษาไทยได้ถูกต้อง</span></label>
+   <label class="check"><input type="radio" name="f"><span>GeoPackage (.gpkg) — มีรูปทรงเชิงพื้นที่</span></label>
+   <label class="check"><input type="radio" name="f"><span>GeoJSON — สำหรับเชื่อมต่อระบบอื่น</span></label>`,
+  `<button class="btn" data-close>ยกเลิก</button>
+   <button class="btn btn-primary" data-close onclick="toast('สร้างงานส่งออกแล้ว — ติดตามสถานะได้ที่หน้าส่งออกและเผยแพร่','download')">ส่งออก</button>`);
+document.getElementById('btnCols').onclick = () => toast('ตัวอย่างหน้าจอ — เลือกคอลัมน์ที่แสดงและลำดับคอลัมน์ได้', 'filter');
+const bn2 = document.getElementById('btnNew'); if (bn2) bn2.onclick = () => location.href = 'data-entry.html';
+paint();
+</script>
+</body>
+</html>

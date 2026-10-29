@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>แดชบอร์ด — GeoCore GIS</title>
+<link rel="icon" href="assets/img/favicon.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/app.css">
+</head>
+<body>
+<main class="content"><div class="content-inner" id="root"></div></main>
+
+<script src="assets/js/data.js"></script>
+<script src="assets/js/shell.js"></script>
+<script>
+renderShell('dashboard.html');
+const root = document.getElementById('root');
+
+const totalFeatures = LAYERS.reduce((s, l) => s + l.count, 0);
+const newFeatures = LAYERS.filter(l => l.isNew).reduce((s, l) => s + l.count, 0);
+
+const agencySeg = [
+  { label: 'อบต. (เจ้าของระบบ)', value: 2184, color: 'var(--s1)' },
+  { label: 'อบจ.',              value: 486,  color: 'var(--s2)' },
+  { label: 'กรมทางหลวงชนบท',     value: 392,  color: 'var(--s3)' },
+  { label: 'กรมทางหลวง',         value: 118,  color: 'var(--s4)' },
+  { label: 'เอกชน',             value: 264,  color: 'var(--s5)' },
+  { label: 'รอยืนยัน',           value: 147,  color: 'var(--ink-3)' }
+];
+
+const approvedTrend = [{
+  color: 'var(--s1)',
+  points: [
+    { t: 'ก.ค.', v: 420 }, { t: 'ส.ค.', v: 1180 }, { t: 'ก.ย.', v: 2640 },
+    { t: 'ต.ค.1', v: 3310 }, { t: 'ต.ค.2', v: 3890 }, { t: 'ต.ค.3', v: 4420 }, { t: 'ต.ค.4', v: 4980 }
+  ]
+}];
+
+const lightStatus = [
+  { label: 'ใช้งานได้',  value: 3372, color: 'var(--s3)' },
+  { label: 'รอซ่อม',     value: 184,  color: 'var(--s4)' },
+  { label: 'ชำรุด',      value: 71,   color: 'var(--s8)' },
+  { label: 'ถอดออกแล้ว', value: 15,   color: 'var(--ink-3)' }
+];
+const lightTotal = lightStatus.reduce((s, x) => s + x.value, 0);
+
+root.innerHTML = `
+${pageHead({
+  title: 'แดชบอร์ดภาพรวม',
+  badge: badge('ข้อมูล ณ 29 ต.ค. 2569 09:15', 'outline'),
+  sub: 'สรุปสถานะฐานข้อมูลเชิงพื้นที่ ความครบถ้วนรายชั้นข้อมูล และงานที่ยังคงค้าง',
+  actions: `<button class="btn" id="btnRange">รอบข้อมูล: เดือนนี้</button>
+            <button class="btn" id="btnPdf">${icon('download')} ส่งออกรายงาน PDF</button>`
+})}
+
+<div class="ro-banner">${icon('info')}<span>กำลังดูในสิทธิ์ <b>ผู้อ่านข้อมูล</b> — ดูและส่งออกได้ แต่แก้ไขข้อมูลไม่ได้</span></div>
+
+<!-- editor-only -->
+<div data-only="editor" class="notice notice-info mb16">${icon('info')}<div>
+  <strong>มุมมองผู้ป้อนข้อมูล</strong>
+  กลุ่มสิทธิ์นี้เห็นเฉพาะงานที่ตนรับผิดชอบ ไม่เห็นตัวเลขสรุปทั้งฐานข้อมูลและรายงานผู้บริหาร</div></div>
+
+<div data-only="editor" class="grid g4 mb24">
+  <div class="stat"><div class="lbl">รายการของฉันวันนี้</div><div class="val num">14</div>
+    <div class="foot"><span class="dot" style="background:var(--s3)"></span>บันทึกแล้ว 14 จาก 20 จุดที่วางแผนไว้</div></div>
+  <div class="stat"><div class="lbl">รอซิงก์จากมือถือ</div><div class="val num">4</div>
+    <div class="foot"><span class="dot" style="background:var(--warning)"></span>บันทึกออฟไลน์ไว้ รอสัญญาณ</div></div>
+  <div class="stat"><div class="lbl">ถูกตีกลับให้แก้ไข</div><div class="val num">2</div>
+    <div class="foot"><span class="dot" style="background:var(--critical)"></span>RD-0163 · SL-00742</div></div>
+  <div class="stat"><div class="lbl">ส่งตรวจแล้วรออนุมัติ</div><div class="val num">7</div>
+    <div class="foot"><span class="dot" style="background:var(--s1)"></span>รอ 1.4 วันโดยเฉลี่ย</div></div>
+</div>
+
+<!-- all read-capable roles -->
+<div data-need="read-all">
+  <div class="grid g4 mb16">
+    <div class="stat">
+      <div class="lbl">${icon('db')} รายการข้อมูลทั้งหมด</div>
+      <div class="val num">${fmt(totalFeatures)}</div>
+      <div class="foot"><span class="delta-up">+${fmt(newFeatures)}</span> รายการจากชั้นข้อมูลใหม่ 8 ชั้น</div>
+    </div>
+    <div class="stat">
+      <div class="lbl">${icon('layers')} ชั้นข้อมูลในทะเบียน</div>
+      <div class="val num">10</div>
+      <div class="foot"><span class="dot" style="background:var(--s3)"></span>อนุมัติแล้ว 6 · รอตรวจ 3 · ร่าง 1</div>
+    </div>
+    <div class="stat">
+      <div class="lbl">${icon('check')} ความครบถ้วนฟิลด์บังคับ</div>
+      <div class="val num">97.4%</div>
+      <div class="foot">เป้าหมาย 100% · <span class="delta-up">+1.8</span> จากรอบก่อน</div>
+    </div>
+    <div class="stat">
+      <div class="lbl">${icon('shield')} ข้อค้นพบ QC คงค้าง</div>
+      <div class="val num">6</div>
+      <div class="foot"><span class="dot" style="background:var(--critical)"></span>วิกฤต 2 · สำคัญ 2 · เตือน 2</div>
+    </div>
+  </div>
+
+  <div class="grid g-2-1 mb16">
+    <div class="card">
+      <div class="card-head"><h2>ความครบถ้วนของข้อมูลรายชั้น</h2><span class="spacer"></span>
+        <span class="hint">% ของฟิลด์บังคับที่กรอกครบ</span></div>
+      <div class="card-body" id="layerBars"></div>
+    </div>
+    <div class="card">
+      <div class="card-head"><h2>ทรัพย์สินตามหน่วยงาน</h2></div>
+      <div class="card-body" id="agencyChart"></div>
+    </div>
+  </div>
+
+  <div class="grid g2 mb16">
+    <div class="card">
+      <div class="card-head"><h2>รายการที่อนุมัติสะสม</h2><span class="spacer"></span>
+        <span class="hint">ก.ค. – ต.ค. 2569</span></div>
+      <div class="card-body" id="trend"></div>
+    </div>
+    <div class="card">
+      <div class="card-head"><h2>สถานะไฟส่องสว่าง</h2><span class="spacer"></span>
+        <span class="hint">${fmt(lightTotal)} จุด</span></div>
+      <div class="card-body" id="lights"></div>
+    </div>
+  </div>
+
+  <div class="grid g-2-1">
+    <div class="card">
+      <div class="card-head"><h2>งานที่ต้องดำเนินการ</h2><span class="spacer"></span>
+        <a class="btn btn-sm" href="review.html">เปิดคิวตรวจสอบ</a></div>
+      <div class="table-wrap">
+        <table class="tbl">
+          <thead><tr><th>รายการ</th><th>ชั้นข้อมูล</th><th>สถานะ</th><th>ผู้รับผิดชอบ</th><th class="num">ค้าง (วัน)</th></tr></thead>
+          <tbody id="todo"></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-head"><h2>กิจกรรมล่าสุด</h2></div>
+      <div class="card-body"><ul class="tl" id="activity"></ul></div>
+      <div class="card-foot"><a href="audit-log.html">ดูบันทึกการใช้งานทั้งหมด →</a></div>
+    </div>
+  </div>
+</div>`;
+
+/* layer completeness bars */
+document.getElementById('layerBars').innerHTML =
+  barChart(LAYERS.map(l => ({ label: `${l.code} ${l.name}`, value: l.complete, color: l.complete >= 95 ? 'var(--s3)' : l.complete >= 85 ? 'var(--s4)' : 'var(--s2)' })), '%')
+  + `<div class="legend"><span class="li"><span class="sw" style="background:var(--s3)"></span>≥ 95%</span>
+      <span class="li"><span class="sw" style="background:var(--s4)"></span>85–94%</span>
+      <span class="li"><span class="sw" style="background:var(--s2)"></span>&lt; 85% ต้องเร่งเก็บข้อมูล</span></div>`;
+
+/* agency donut */
+document.getElementById('agencyChart').innerHTML =
+  `<div class="donutwrap">${donut(agencySeg, fmt(agencySeg.reduce((s, x) => s + x.value, 0)), 'รายการ')}
+   <div style="flex:1;min-width:150px">${legendRow(agencySeg, true)}</div></div>
+   <p class="small muted mt16" style="margin-bottom:0">รายการ "รอยืนยัน" คือทรัพย์สินที่ยังระบุเจ้าของหรือผู้บำรุงรักษาไม่ได้
+   ระบบบันทึกเป็นสถานะแยกต่างหาก ไม่สรุปจากการสังเกตภาคสนามเพียงอย่างเดียว</p>`;
+
+/* trend */
+document.getElementById('trend').innerHTML = lineChart(approvedTrend, { min: 0, max: 5600, aria: 'จำนวนรายการที่อนุมัติสะสมรายเดือน' })
+  + `<p class="small muted mt8" style="margin-bottom:0">รวมสะสม <b class="num">4,980</b> รายการ
+     จากเป้าหมายงวดที่ 2 จำนวน <b class="num">5,400</b> รายการ (92.2%)</p>`;
+
+/* light status stacked */
+document.getElementById('lights').innerHTML = `
+  <div class="stackbar" style="height:16px">
+    ${lightStatus.map(s => `<span style="flex:${s.value};background:${s.color}" title="${s.label}: ${fmt(s.value)}"></span>`).join('')}
+  </div>
+  ${legendRow(lightStatus, true)}
+  <div class="grid g2 mt16" style="gap:10px">
+    <div class="stat" style="padding:10px 12px"><div class="lbl">อัตราใช้งานได้</div><div class="val num" style="font-size:1.4rem">92.6%</div>
+      <div class="foot">เป้าหมาย 95%</div></div>
+    <div class="stat" style="padding:10px 12px"><div class="lbl">รอซ่อมเกิน 30 วัน</div><div class="val num" style="font-size:1.4rem">48</div>
+      <div class="foot">จุด · เฉลี่ยค้าง 41 วัน</div></div>
+  </div>`;
+
+/* todo table */
+const TODO = [
+  ['RD-0163 ซอยริมคลองสาธารณะ 7', 'L01 ถนน', 'review', 'ปิยะนุช ส.', 6],
+  ['WF-00031 ถังเก็บน้ำบ้านกลาง',   'L05 แหล่งน้ำ', 'draft', 'อรทัย พ.', 4],
+  ['DI-00097 จุดน้ำท่วมซ้ำซาก',     'L06 ทางระบายน้ำ', 'review', 'ณัฐวุฒิ ร.', 3],
+  ['RD-0171 ถนนเชื่อมเขตข้างเคียง', 'L01 ถนน', 'review', 'ปิยะนุช ส.', 2],
+  ['CC-00188 กล้องหน้าตลาด',       'L03 CCTV', 'review', 'ธนากร ค.', 2],
+  ['SL-00742 โคมไฟสูงกิ่งคู่',       'L02 ไฟส่องสว่าง', 'rejected', 'ธนากร ค.', 1],
+  ['BD-02 พื้นที่ขาดทิศตะวันออก',    'L08 แนวเขต', 'review', 'ปิยะนุช ส.', 1]
+];
+document.getElementById('todo').innerHTML = TODO.map(r => `<tr>
+  <td><b>${r[0].split(' ')[0]}</b><br><span class="small dim">${r[0].split(' ').slice(1).join(' ')}</span></td>
+  <td class="small">${r[1]}</td>
+  <td><span class="badge ${STATUS_LABEL[r[2]].c}">${STATUS_LABEL[r[2]].t}</span></td>
+  <td class="small">${r[3]}</td>
+  <td class="num">${r[4] >= 5 ? `<b style="color:var(--critical)">${r[4]}</b>` : r[4]}</td></tr>`).join('');
+
+/* activity */
+document.getElementById('activity').innerHTML = AUDIT.slice(0, 5).map((a, i) => `
+  <li class="${i === 0 ? 'now' : 'done'}">
+    <div class="tt">${a.act} — ${a.obj}</div>
+    <div class="td">${a.user} (${ROLES[a.role].name}) · ${a.ts}</div>
+  </li>`).join('');
+
+document.getElementById('btnRange').addEventListener('click', () => toast('ตัวอย่างหน้าจอ — ตัวเลือกช่วงเวลา: วันนี้ / 7 วัน / เดือนนี้ / ไตรมาส / กำหนดเอง', 'info'));
+document.getElementById('btnPdf').addEventListener('click', () => toast('กำลังสร้างรายงาน PDF — ระบบจะแจ้งเมื่อไฟล์พร้อมดาวน์โหลด', 'download'));
+document.addEventListener('rolechange', () => location.reload());
+</script>
+</body>
+</html>

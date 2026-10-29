@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ผู้ใช้งานและสิทธิ์ — GeoCore GIS</title>
+<link rel="icon" href="assets/img/favicon.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/app.css">
+<style>
+  .pm { width: 34px; text-align: center; }
+  .pm span { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; }
+  .pm .y { background: var(--good-wash); color: var(--good-ink); }
+  .pm .o { background: var(--warning-wash); color: #7a5200; font-size: .62rem; font-weight: 700; }
+  .pm .n { color: var(--ink-3); }
+  .pm svg { width: 13px; height: 13px; }
+</style>
+</head>
+<body>
+<main class="content"><div class="content-inner" id="root"></div></main>
+
+<script src="assets/js/data.js"></script>
+<script src="assets/js/shell.js"></script>
+<script>
+renderShell('users.html');
+const root = document.getElementById('root');
+
+const groups = [...new Set(PERMISSIONS.map(p => p.g))];
+const cell = v => v === 'full'
+  ? `<span class="y">${icon('check')}</span>`
+  : v === 'own' ? `<span class="o" title="เฉพาะรายการของตนเอง">ตน</span>`
+  : `<span class="n">—</span>`;
+
+root.innerHTML = `
+${pageHead({
+  crumbs: ['<a href="index.html">หน้าแรก</a>', 'ผู้ใช้งานและสิทธิ์'],
+  title: 'ผู้ใช้งานและกลุ่มสิทธิ์',
+  sub: 'กลุ่มสิทธิ์หลัก 3 กลุ่มตามลักษณะงาน (อ่าน / ป้อน / ทั้งสองอย่าง) และกลุ่มผู้ดูแลระบบสำหรับงานตั้งค่า',
+  actions: `<button class="btn" id="btnMatrix">${icon('download')} ส่งออกตารางสิทธิ์</button>
+            <button class="btn btn-primary" data-only="admin" id="btnAdd">${icon('plus')} เพิ่มผู้ใช้งาน</button>`
+})}
+
+<div data-only="viewer editor both" class="notice notice-warn mb16">${icon('warn')}<div>
+  <strong>สิทธิ์ปัจจุบันจัดการผู้ใช้งานไม่ได้</strong>
+  หน้านี้แสดงให้เห็นโครงสร้างสิทธิ์ แต่การเพิ่ม แก้ไข หรือเพิกถอนสิทธิ์สงวนไว้สำหรับ
+  <b>ผู้ดูแลระบบ</b> เท่านั้น และทุกการเปลี่ยนแปลงถูกบันทึกลงบันทึกการใช้งาน</div></div>
+
+<div class="grid g4 mb16" id="roleStats"></div>
+
+<div class="card mb16">
+  <div class="card-head"><h2>ตารางสิทธิ์ตามกลุ่มผู้ใช้งาน</h2><span class="spacer"></span>
+    <span class="hint">ตารางที่ 3 — สิทธิ์ 20 รายการเทียบ 4 กลุ่ม</span></div>
+  <div class="table-wrap">
+    <table class="tbl">
+      <thead><tr>
+        <th style="width:150px">กลุ่มงาน</th><th>สิทธิ์</th>
+        <th class="pm" title="ผู้อ่านข้อมูล">อ่าน</th>
+        <th class="pm" title="ผู้ป้อนข้อมูล">ป้อน</th>
+        <th class="pm" title="ผู้ใช้งานทั้งสองสิทธิ์">ทั้งสอง</th>
+        <th class="pm" title="ผู้ดูแลระบบ">ผู้ดูแล</th>
+      </tr></thead>
+      <tbody>
+        ${groups.map(g => PERMISSIONS.filter(p => p.g === g).map((p, i) => `<tr>
+          ${i === 0 ? `<td rowspan="${PERMISSIONS.filter(x => x.g === g).length}"
+            style="font-weight:600;background:var(--surface-2);vertical-align:top">${g}</td>` : ''}
+          <td>${p.p}</td>
+          <td class="pm">${cell(p.viewer)}</td><td class="pm">${cell(p.editor)}</td>
+          <td class="pm">${cell(p.both)}</td><td class="pm">${cell(p.admin)}</td>
+        </tr>`).join('')).join('')}
+      </tbody>
+    </table>
+  </div>
+  <div class="card-foot row">
+    <span class="row row-tight small"><span class="pm">${cell('full')}</span> ทำได้เต็มสิทธิ์</span>
+    <span class="row row-tight small"><span class="pm">${cell('own')}</span> ทำได้เฉพาะรายการของตนเอง</span>
+    <span class="row row-tight small"><span class="pm">${cell('no')}</span> ทำไม่ได้</span>
+  </div>
+</div>
+
+<div class="grid g-2-1">
+  <div class="card">
+    <div class="card-head"><h2>บัญชีผู้ใช้งาน</h2><span class="spacer"></span>
+      <input type="search" id="uq" placeholder="ค้นหาชื่อหรือหน่วยงาน" style="width:200px;min-height:30px;font-size:.82rem"></div>
+    <div class="table-wrap">
+      <table class="tbl">
+        <thead><tr><th>รหัส</th><th>ชื่อ</th><th>หน่วยงาน</th><th>กลุ่มสิทธิ์</th>
+          <th>ชั้นข้อมูลที่เข้าถึง</th><th>เข้าใช้ล่าสุด</th><th>สถานะ</th><th data-only="admin"></th></tr></thead>
+        <tbody id="uRows"></tbody>
+      </table>
+    </div>
+    <div class="card-foot">ผู้ใช้งานภายนอก (ผู้รับจ้าง/ที่ปรึกษา) กำหนดวันหมดอายุสิทธิ์ได้
+      ระบบเพิกถอนสิทธิ์อัตโนมัติเมื่อถึงกำหนดและลบชุดข้อมูลออฟไลน์ออกจากอุปกรณ์</div>
+  </div>
+
+  <div class="stack">
+    <div class="card">
+      <div class="card-head"><h2>สัดส่วนผู้ใช้งานตามกลุ่มสิทธิ์</h2></div>
+      <div class="card-body" id="uChart"></div>
+    </div>
+    <div class="card">
+      <div class="card-head"><h2>หลักการกำหนดสิทธิ์</h2></div>
+      <div class="card-body">
+        <ul style="padding-left:18px;margin:0;font-size:.85rem">
+          <li><b>ให้สิทธิ์เท่าที่จำเป็น</b> — ผู้ใช้ได้รับเฉพาะสิทธิ์และชั้นข้อมูลที่ใช้ปฏิบัติงานจริง</li>
+          <li><b>แยกหน้าที่</b> — ผู้ป้อนข้อมูลอนุมัติรายการของตนเองไม่ได้ ลดความเสี่ยงการบันทึกข้อมูลที่ไม่ผ่านการสอบทาน</li>
+          <li><b>จำกัดขอบเขตข้อมูล</b> — กำหนดได้ทั้งระดับชั้นข้อมูลและระดับพื้นที่ (เช่น เฉพาะหมู่ที่รับผิดชอบ)</li>
+          <li><b>สิทธิ์มีวันหมดอายุ</b> — บัญชีผู้ใช้ภายนอกต้องกำหนดวันสิ้นสุดเสมอ</li>
+          <li><b>บันทึกทุกการกระทำ</b> — การให้สิทธิ์ เพิกถอน และการเข้าถึงข้อมูลอ่อนไหวบันทึกลง Audit Log</li>
+          <li><b>ข้อมูลอ่อนไหวแยกชั้น</b> — ชั้นข้อมูล CCTV ต้องให้สิทธิ์รายบุคคล ไม่ให้ตามกลุ่มโดยอัตโนมัติ</li>
+        </ul>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-head"><h2>การยืนยันตัวตน</h2></div>
+      <div class="table-wrap">
+        <table class="tbl compact">
+          <tbody>
+            <tr><td style="font-weight:600;background:var(--surface-2);width:120px">วิธีเข้าสู่ระบบ</td>
+              <td class="small">บัญชีผู้ใช้ขององค์กร (OIDC) หรือชื่อผู้ใช้/รหัสผ่านสำรอง</td></tr>
+            <tr><td style="font-weight:600;background:var(--surface-2)">ความยาวรหัสผ่าน</td>
+              <td class="small">อย่างน้อย 12 อักขระ ตรวจเทียบรายการรหัสผ่านที่รั่วไหล (NIST SP 800-63B)</td></tr>
+            <tr><td style="font-weight:600;background:var(--surface-2)">การยืนยันสองขั้นตอน</td>
+              <td class="small">บังคับสำหรับกลุ่มผู้ดูแลระบบและผู้ใช้งานภายนอก</td></tr>
+            <tr><td style="font-weight:600;background:var(--surface-2)">อายุ session</td>
+              <td class="small">Access token 30 นาที · Refresh token 8 ชั่วโมง · หมดอายุทันทีเมื่อเพิกถอนสิทธิ์</td></tr>
+            <tr><td style="font-weight:600;background:var(--surface-2)">การล็อกบัญชี</td>
+              <td class="small">ล็อก 15 นาทีหลังใส่รหัสผิด 5 ครั้ง และแจ้งผู้ดูแลระบบ</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+`;
+
+document.getElementById('roleStats').innerHTML = Object.values(ROLES).map(r => {
+  const n = USERS.filter(u => u.role === r.code).length;
+  return `<div class="stat">
+    <div class="lbl"><span style="width:8px;height:8px;border-radius:50%;background:${r.color};display:inline-block"></span> ${r.name}</div>
+    <div class="val num">${n}</div><div class="foot">${r.en}</div></div>`;
+}).join('');
+
+function paintUsers() {
+  const q = document.getElementById('uq').value.trim().toLowerCase();
+  document.getElementById('uRows').innerHTML = USERS
+    .filter(u => !q || u.name.toLowerCase().includes(q) || u.unit.toLowerCase().includes(q))
+    .map(u => {
+      const r = ROLES[u.role];
+      return `<tr>
+        <td class="mono small">${u.id}</td>
+        <td><b>${u.name}</b><br><span class="xsmall muted">${u.email}</span></td>
+        <td class="small">${u.unit}</td>
+        <td><span class="badge" style="background:color-mix(in srgb, ${r.color} 16%, transparent);color:${r.color}">${r.name}</span></td>
+        <td class="small">${u.layers}</td>
+        <td class="small nowrap">${u.last}</td>
+        <td>${u.active ? '<span class="badge badge-good">ใช้งานอยู่</span>' : '<span class="badge badge-outline">ระงับ</span>'}</td>
+        <td data-only="admin"><div class="cell-actions">
+          <button class="btn btn-sm btn-ghost" title="แก้ไขสิทธิ์" onclick="toast('แก้ไขกลุ่มสิทธิ์และขอบเขตชั้นข้อมูลของ ${u.name}','pencil')">${icon('pencil')}</button>
+          <button class="btn btn-sm btn-ghost" title="ระงับการใช้งาน" onclick="toast('ระงับการใช้งานบัญชี ${u.id} — บันทึกลง Audit Log','lock')">${icon('lock')}</button>
+        </div></td></tr>`;
+    }).join('');
+}
+document.getElementById('uq').addEventListener('input', paintUsers);
+paintUsers();
+
+const seg = Object.values(ROLES).map(r => ({
+  label: r.name, value: USERS.filter(u => u.role === r.code).length, color: r.color
+}));
+document.getElementById('uChart').innerHTML =
+  `<div class="donutwrap">${donut(seg, USERS.length, 'บัญชี', 118)}
+   <div style="flex:1;min-width:130px">${legendRow(seg)}</div></div>`;
+
+document.getElementById('btnMatrix').onclick = () => toast('ส่งออกตารางสิทธิ์เป็น XLSX สำหรับแนบเอกสารนโยบายความปลอดภัย', 'download');
+const ba = document.getElementById('btnAdd');
+if (ba) ba.onclick = () => modal('เพิ่มผู้ใช้งาน',
+  `<div class="inline-group">
+     <div class="field"><label>ชื่อ-นามสกุล <span class="req">*</span></label><input type="text"></div>
+     <div class="field"><label>อีเมลองค์กร <span class="req">*</span></label><input type="email" placeholder="name@example.go.th"></div>
+   </div>
+   <div class="field"><label>หน่วยงาน/กอง <span class="req">*</span></label>
+     <select><option>กองช่าง</option><option>กองคลัง</option><option>กองสาธารณสุขและสิ่งแวดล้อม</option>
+       <option>สำนักปลัด</option><option>ผู้รับจ้าง/ที่ปรึกษา</option></select></div>
+   <div class="field"><label>กลุ่มสิทธิ์ <span class="req">*</span></label>
+     <select>${Object.values(ROLES).map(r => `<option>${r.name} — ${r.en}</option>`).join('')}</select></div>
+   <div class="field"><label>ชั้นข้อมูลที่เข้าถึงได้</label>
+     <select multiple size="5" style="min-height:auto">${LAYERS.map(l => `<option>${l.code} · ${l.name}</option>`).join('')}</select>
+     <div class="hint">ชั้นข้อมูล L03 (CCTV) ต้องให้สิทธิ์รายบุคคลและระบุเหตุผล</div></div>
+   <div class="field" style="margin-bottom:0"><label>วันหมดอายุสิทธิ์</label><input type="date">
+     <div class="hint">บังคับสำหรับผู้ใช้งานภายนอก</div></div>`,
+  `<button class="btn" data-close>ยกเลิก</button>
+   <button class="btn btn-primary" data-close onclick="toast('สร้างบัญชีผู้ใช้งานแล้ว — ส่งลิงก์ตั้งรหัสผ่านทางอีเมล','check')">สร้างบัญชี</button>`);
+</script>
+</body>
+</html>

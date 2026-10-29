@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>สำรวจภาคสนามบนมือถือ — GeoCore GIS</title>
+<link rel="icon" href="assets/img/favicon.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/app.css">
+<style>
+  .mini { padding: 12px 13px; }
+  .mini h4 { font-size: .9rem; margin-bottom: 2px; }
+  .mini .bar { display: flex; align-items: center; gap: 8px; padding: 10px 13px;
+    border-bottom: 1px solid var(--line); background: var(--surface-2); position: sticky; top: 0; z-index: 3; }
+  .mini .bar .t { font-weight: 650; font-size: .88rem; flex: 1; }
+  .mini .tabbar { position: sticky; bottom: 0; display: flex; border-top: 1px solid var(--line);
+    background: var(--surface-1); }
+  .mini .tabbar a { flex: 1; text-align: center; padding: 9px 2px 10px; font-size: .62rem; color: var(--ink-3); }
+  .mini .tabbar a.on { color: var(--accent-ink); font-weight: 650; }
+  .mini .tabbar svg { width: 19px; height: 19px; display: block; margin: 0 auto 2px; }
+  .task { display: flex; gap: 10px; padding: 11px 13px; border-bottom: 1px solid var(--line); align-items: flex-start; }
+  .task .ic { width: 30px; height: 30px; flex: 0 0 30px; border-radius: var(--r-sm); display: grid; place-items: center; }
+  .task .nm { font-size: .84rem; font-weight: 600; }
+  .task .sb { font-size: .72rem; color: var(--ink-3); }
+  .fab { position: absolute; right: 14px; bottom: 62px; width: 50px; height: 50px; border-radius: 50%;
+    background: var(--b500); color: #fff; display: grid; place-items: center; box-shadow: var(--shadow-lg); border: 0; cursor: pointer; }
+  .fab svg { width: 24px; height: 24px; }
+  .offline { background: var(--warning-wash); color: #7a5200; font-size: .72rem; font-weight: 600;
+    padding: 5px 13px; display: flex; align-items: center; gap: 6px; }
+  .offline svg { width: 13px; height: 13px; }
+</style>
+</head>
+<body>
+<main class="content"><div class="content-inner" id="root"></div></main>
+
+<script src="assets/js/data.js"></script>
+<script src="assets/js/shell.js"></script>
+<script>
+renderShell('mobile-survey.html');
+const root = document.getElementById('root');
+
+const P = (title, body, tab, offline) => `
+<div class="phone"><div class="notch"><i></i></div><div class="scr mini" style="padding:0;position:relative">
+  <div class="bar">${icon('menu')}<span class="t">${title}</span>${icon('search')}</div>
+  ${offline ? `<div class="offline">${icon('warn')} ไม่มีสัญญาณ — บันทึกลงเครื่องและจะซิงก์อัตโนมัติ</div>` : ''}
+  ${body}
+  <div class="tabbar">
+    <a class="${tab === 0 ? 'on' : ''}">${icon('check')}งานสำรวจ</a>
+    <a class="${tab === 1 ? 'on' : ''}">${icon('map')}แผนที่</a>
+    <a class="${tab === 2 ? 'on' : ''}">${icon('plus')}บันทึก</a>
+    <a class="${tab === 3 ? 'on' : ''}">${icon('upload')}ซิงก์</a>
+  </div>
+</div></div>`;
+
+const screen1 = P('งานสำรวจของฉัน', `
+  <div class="mini" style="border-bottom:1px solid var(--line)">
+    <div class="row row-tight" style="justify-content:space-between">
+      <div><div class="xsmall muted">รอบสำรวจ</div><h4>ไฟส่องสว่าง หมู่ 3–5</h4></div>
+      <span class="badge badge-info">14 / 20</span>
+    </div>
+    <div class="progress mt8"><i style="width:70%"></i></div>
+    <div class="xsmall muted mt8">ดาวน์โหลดแผนที่ฐานและชั้นข้อมูลไว้ใช้ออฟไลน์แล้ว · 42 MB</div>
+  </div>
+  <div class="task"><span class="ic" style="background:var(--good-wash);color:var(--good-ink)">${icon('check')}</span>
+    <span style="flex:1"><span class="nm">SL-00741</span><span class="sb">บันทึกแล้ว · ซิงก์เรียบร้อย · 08:12</span></span></div>
+  <div class="task"><span class="ic" style="background:var(--warning-wash);color:#7a5200">${icon('upload')}</span>
+    <span style="flex:1"><span class="nm">SL-00742</span><span class="sb">บันทึกในเครื่อง · รอสัญญาณ</span></span></div>
+  <div class="task"><span class="ic" style="background:var(--warning-wash);color:#7a5200">${icon('upload')}</span>
+    <span style="flex:1"><span class="nm">SL-00743</span><span class="sb">บันทึกในเครื่อง · มีภาพถ่าย 2 ไฟล์</span></span></div>
+  <div class="task"><span class="ic" style="background:var(--critical-wash);color:var(--critical)">${icon('warn')}</span>
+    <span style="flex:1"><span class="nm">SL-00739</span><span class="sb">ถูกตีกลับ — ไม่ระบุหลักฐานอ้างอิง</span></span></div>
+  <div class="task"><span class="ic" style="background:var(--surface-3);color:var(--ink-3)">${icon('pin')}</span>
+    <span style="flex:1"><span class="nm">จุดที่วางแผนไว้ 6 จุด</span><span class="sb">ซอยชุมชนร่วมใจ 4 · ระยะ 320 ม.</span></span></div>
+  <button class="fab">${icon('plus')}</button>`, 0);
+
+const screen2 = P('บันทึกไฟส่องสว่าง', `
+  <div class="mini">
+    <div style="height:116px;border-radius:var(--r-md);background:var(--surface-2);border:1px solid var(--line);
+      display:grid;place-items:center;color:var(--ink-3);font-size:.74rem;text-align:center">
+      ${icon('target')}<div style="margin-top:4px">พิกัดจาก GNSS<br><b class="mono" style="color:var(--ink-1)">12.852140, 101.246310</b><br>ความแม่นยำ 1.1 ม.</div></div>
+    <div class="field mt16" style="margin-bottom:10px"><label>รหัสรายการ</label>
+      <input type="text" value="SL-00743" readonly></div>
+    <div class="field" style="margin-bottom:10px"><label>ประเภทอุปกรณ์ <span class="req">*</span></label>
+      <select><option>โคมไฟ LED 100W</option><option>โคมไฟโซลาร์เซลล์</option></select></div>
+    <div class="field" style="margin-bottom:10px"><label>สถานะใช้งาน <span class="req">*</span></label>
+      <div class="segmented" style="width:100%">
+        <button aria-pressed="true" style="flex:1">ใช้งานได้</button>
+        <button style="flex:1">ชำรุด</button><button style="flex:1">รอซ่อม</button></div></div>
+    <div class="field" style="margin-bottom:10px"><label>เจ้าของทรัพย์สิน <span class="req">*</span></label>
+      <select><option>อบต. — องค์การบริหารส่วนตำบล</option></select></div>
+    <div class="field" style="margin-bottom:10px"><label>หลักฐานอ้างอิง <span class="req">*</span></label>
+      <input type="text" value="ทะเบียนทรัพย์สิน กช.112/2569"></div>
+    <div class="grid" style="grid-template-columns:1fr 1fr;gap:7px">
+      <div style="aspect-ratio:4/3;border:1px solid var(--line);border-radius:var(--r-sm);background:var(--surface-2);
+        display:grid;place-items:center;color:var(--ink-3);font-size:.68rem">${icon('file')}IMG_2411</div>
+      <div style="aspect-ratio:4/3;border:1px dashed var(--line-strong);border-radius:var(--r-sm);
+        display:grid;place-items:center;color:var(--ink-3);font-size:.68rem">${icon('upload')}ถ่ายภาพ</div>
+    </div>
+    <button class="btn btn-primary btn-block mt16">${icon('save')} บันทึกลงเครื่อง</button>
+    <p class="xsmall muted mt8" style="margin-bottom:0">ตรวจฟิลด์บังคับและช่วงค่าในเครื่องก่อนบันทึก
+      จึงไม่ต้องรอสัญญาณเพื่อรู้ว่ากรอกครบหรือไม่</p>
+  </div>`, 2, true);
+
+const screen3 = P('ซิงก์ข้อมูล', `
+  <div class="mini">
+    <div class="notice notice-good" style="margin-bottom:12px">${icon('check')}
+      <div><strong>เชื่อมต่อแล้ว</strong>กำลังซิงก์รายการที่ค้างอยู่</div></div>
+    <div class="row" style="justify-content:space-between;font-size:.8rem">
+      <span>รายการรอซิงก์</span><b class="num">4</b></div>
+    <div class="progress mt8" style="height:8px"><i style="width:75%"></i></div>
+    <div class="xsmall muted mt8 mb16">กำลังอัปโหลด 3 จาก 4 · ภาพถ่าย 6 ไฟล์ (18.4 MB)</div>
+    <div class="task" style="padding:9px 0"><span class="ic" style="background:var(--good-wash);color:var(--good-ink)">${icon('check')}</span>
+      <span style="flex:1"><span class="nm">SL-00742</span><span class="sb">ซิงก์สำเร็จ · สร้างรายการในฐานข้อมูล</span></span></div>
+    <div class="task" style="padding:9px 0"><span class="ic" style="background:var(--good-wash);color:var(--good-ink)">${icon('check')}</span>
+      <span style="flex:1"><span class="nm">SL-00743</span><span class="sb">ซิงก์สำเร็จ · แนบภาพถ่าย 2 ไฟล์</span></span></div>
+    <div class="task" style="padding:9px 0"><span class="ic" style="background:var(--accent-wash);color:var(--accent-ink)">${icon('upload')}</span>
+      <span style="flex:1"><span class="nm">SL-00744</span><span class="sb">กำลังอัปโหลดภาพถ่าย…</span></span></div>
+    <div class="task" style="padding:9px 0;border-bottom:0"><span class="ic" style="background:var(--warning-wash);color:#7a5200">${icon('warn')}</span>
+      <span style="flex:1"><span class="nm">SL-00745</span><span class="sb">พิกัดซ้ำกับ SL-00412 (0.6 ม.) — ต้องยืนยันก่อน</span></span></div>
+    <button class="btn btn-block mt16">ดูรายการที่ต้องยืนยัน</button>
+  </div>`, 3);
+
+root.innerHTML = `
+${pageHead({
+  crumbs: ['<a href="index.html">หน้าแรก</a>', 'สำรวจภาคสนามบนมือถือ'],
+  title: 'สำรวจภาคสนามบนมือถือ',
+  badge: badge('ทำงานออฟไลน์ได้', 'good'),
+  sub: 'หน้าจอเดียวกับระบบหลักแต่จัดวางสำหรับหน้าจอขนาดเล็ก ใช้บันทึกข้อมูลระหว่างสำรวจและซิงก์เมื่อมีสัญญาณ'
+})}
+
+<div class="grid g3 mb24">
+  <div class="stat"><div class="lbl">${icon('mobile')} ใช้งานผ่านเบราว์เซอร์</div><div class="val" style="font-size:1.15rem">ไม่ต้องติดตั้งแอป</div>
+    <div class="foot">Progressive Web App · เพิ่มลงหน้าจอหลักได้</div></div>
+  <div class="stat"><div class="lbl">${icon('upload')} บันทึกออฟไลน์</div><div class="val" style="font-size:1.15rem">IndexedDB + คิวซิงก์</div>
+    <div class="foot">ซิงก์แบบ idempotent ไม่สร้างรายการซ้ำเมื่อส่งซ้ำ</div></div>
+  <div class="stat"><div class="lbl">${icon('target')} ความแม่นยำตำแหน่ง</div><div class="val" style="font-size:1.15rem">รองรับ RTK ภายนอก</div>
+    <div class="foot">เชื่อมเครื่องรับสัญญาณผ่าน Bluetooth หรือ NTRIP</div></div>
+</div>
+
+<div class="card mb24">
+  <div class="card-head"><h2>หน้าจอบนมือถือ</h2><span class="spacer"></span>
+    <span class="hint">ภาพที่ 2 — ลำดับการใช้งานขณะสำรวจ</span></div>
+  <div class="card-body">
+    <div class="phonewrap">${screen1}${screen2}${screen3}</div>
+    <div class="row mt16" style="justify-content:center;gap:40px;font-size:.78rem;color:var(--ink-3)">
+      <span>1 · รายการงานสำรวจและสถานะซิงก์</span>
+      <span>2 · บันทึกข้อมูลขณะไม่มีสัญญาณ</span>
+      <span>3 · ซิงก์และจัดการรายการที่ขัดแย้ง</span>
+    </div>
+  </div>
+</div>
+
+<div class="grid g2">
+  <div class="card">
+    <div class="card-head"><h2>การทำงานแบบออฟไลน์</h2></div>
+    <div class="card-body">
+      <ol style="padding-left:18px;margin:0">
+        <li><b>เตรียมงานก่อนออกสนาม</b> — ดาวน์โหลดขอบเขตพื้นที่ แผนที่ฐาน และชั้นข้อมูลที่เกี่ยวข้องลงเครื่อง
+          ผ่าน <code>GET /survey/packages/{layerCode}</code></li>
+        <li><b>บันทึกระหว่างสำรวจ</b> — ข้อมูลและภาพถ่ายเก็บใน IndexedDB พร้อมรหัสชั่วคราวฝั่งอุปกรณ์
+          ระบบตรวจฟิลด์บังคับและช่วงค่าในเครื่องทันที</li>
+        <li><b>ซิงก์เมื่อมีสัญญาณ</b> — ส่งเป็นชุดผ่าน <code>POST /survey/sync</code>
+          โดยใช้คีย์ idempotency เพื่อไม่ให้เกิดรายการซ้ำหากส่งซ้ำ</li>
+        <li><b>จัดการความขัดแย้ง</b> — หากรายการเดียวกันถูกแก้ไขจากสองที่ ระบบแสดงค่าทั้งสองฝั่งให้ผู้สำรวจเลือก
+          และบันทึกการตัดสินใจลง Audit Log</li>
+        <li><b>ส่งตรวจสอบ</b> — เมื่อซิงก์สำเร็จ รายการเข้าสู่สถานะ "ส่งตรวจ" และรอการอนุมัติ</li>
+      </ol>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-head"><h2>ข้อกำหนดด้านอุปกรณ์และความปลอดภัย</h2></div>
+    <div class="table-wrap">
+      <table class="tbl compact">
+        <thead><tr><th>หัวข้อ</th><th>ข้อกำหนด</th></tr></thead>
+        <tbody>
+          <tr><td>ระบบปฏิบัติการ</td><td>Android 10 ขึ้นไป หรือ iOS 15 ขึ้นไป (เบราว์เซอร์ที่รองรับ PWA)</td></tr>
+          <tr><td>พื้นที่จัดเก็บ</td><td>อย่างน้อย 2 GB สำหรับแผนที่ฐานออฟไลน์และภาพถ่ายที่รอซิงก์</td></tr>
+          <tr><td>ความแม่นยำตำแหน่ง</td><td>GNSS ในเครื่อง ≤ 5 ม. · เครื่องรับ RTK ภายนอก ≤ 0.05 ม.
+            ระบบบันทึกค่าที่วัดได้จริงทุกรายการ</td></tr>
+          <tr><td>การยืนยันตัวตน</td><td>โทเค็นหมดอายุ 30 นาที ต่ออายุอัตโนมัติ · ล็อกด้วยรหัสผ่านหรือไบโอเมตริกของเครื่อง</td></tr>
+          <tr><td>การเข้ารหัส</td><td>ข้อมูลที่พักในเครื่องเข้ารหัส · รับส่งผ่าน TLS 1.3 เท่านั้น</td></tr>
+          <tr><td>ข้อมูลส่วนบุคคล</td><td>ไม่จัดเก็บชื่อหรือที่อยู่เจ้าของทรัพย์สินในอุปกรณ์ภาคสนาม (PDPA)</td></tr>
+          <tr><td>การลบข้อมูลจากเครื่อง</td><td>ลบชุดข้อมูลออฟไลน์อัตโนมัติเมื่อปิดรอบสำรวจหรือเมื่อเพิกถอนสิทธิ์ผู้ใช้</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div class="notice notice-info mt16">${icon('info')}<div>
+  <strong>ทดลองดูการปรับขนาดหน้าจอ</strong>
+  ทุกหน้าจอในต้นแบบชุดนี้เป็น responsive — ย่อหน้าต่างเบราว์เซอร์ให้แคบกว่า 860 พิกเซล
+  เมนูด้านข้างจะยุบเป็นเมนูแบบดึงออก และตารางจะเลื่อนในแนวนอนแทนการบีบคอลัมน์</div></div>
+`;
+</script>
+</body>
+</html>

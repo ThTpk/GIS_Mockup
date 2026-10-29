@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>บันทึกการใช้งาน — GeoCore GIS</title>
+<link rel="icon" href="assets/img/favicon.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/app.css">
+</head>
+<body>
+<main class="content"><div class="content-inner" id="root"></div></main>
+
+<script src="assets/js/data.js"></script>
+<script src="assets/js/shell.js"></script>
+<script>
+renderShell('audit-log.html');
+const root = document.getElementById('root');
+
+const ACT = {
+  CREATE:  { t: 'สร้าง',       c: 'badge-good' },
+  UPDATE:  { t: 'แก้ไข',       c: 'badge-info' },
+  DELETE:  { t: 'ยกเลิกใช้งาน', c: 'badge-critical' },
+  SUBMIT:  { t: 'ส่งตรวจ',     c: 'badge-outline' },
+  APPROVE: { t: 'อนุมัติ',     c: 'badge-good' },
+  REJECT:  { t: 'ตีกลับ',      c: 'badge-critical' },
+  EXPORT:  { t: 'ส่งออก',      c: 'badge-warning' },
+  PUBLISH: { t: 'เผยแพร่',     c: 'badge-warning' },
+  GRANT:   { t: 'ให้สิทธิ์',    c: 'badge-serious' },
+  QC_RUN:  { t: 'ตรวจคุณภาพ',  c: 'badge-info' }
+};
+
+root.innerHTML = `
+${pageHead({
+  crumbs: ['<a href="index.html">หน้าแรก</a>', 'บันทึกการใช้งาน'],
+  title: 'บันทึกการใช้งาน (Audit Log)',
+  sub: 'บันทึกว่าใครทำอะไร เมื่อไร กับข้อมูลใด พร้อมค่าก่อน/หลัง ใช้ประกอบการตรวจสอบภายในและการสอบทานข้อมูล',
+  actions: `<button class="btn" id="btnFilter">${icon('filter')} ตัวกรองขั้นสูง</button>
+            <button class="btn" data-only="admin" id="btnCsv">${icon('download')} ส่งออก CSV</button>`
+})}
+
+<div data-only="viewer editor" class="notice notice-warn mb16">${icon('warn')}<div>
+  <strong>สิทธิ์ปัจจุบันดูบันทึกการใช้งานทั้งระบบไม่ได้</strong>
+  กลุ่มผู้อ่านข้อมูลและผู้ป้อนข้อมูลเห็นได้เฉพาะประวัติของรายการที่ตนเกี่ยวข้อง
+  การดูบันทึกทั้งระบบสงวนไว้สำหรับกลุ่มผู้ใช้งานทั้งสองสิทธิ์และผู้ดูแลระบบ</div></div>
+
+<div class="grid g4 mb16">
+  <div class="stat"><div class="lbl">เหตุการณ์วันนี้</div><div class="val num">184</div>
+    <div class="foot">แก้ไขข้อมูล 96 · เข้าถึง 72 · ตั้งค่า 16</div></div>
+  <div class="stat"><div class="lbl">ผู้ใช้งานที่ใช้งานวันนี้</div><div class="val num">9</div>
+    <div class="foot">จากทั้งหมด 10 บัญชี</div></div>
+  <div class="stat"><div class="lbl">การส่งออก/เผยแพร่</div><div class="val num">6</div>
+    <div class="foot"><span class="dot" style="background:var(--warning)"></span>ตรวจสอบย้อนหลังได้ทุกครั้ง</div></div>
+  <div class="stat"><div class="lbl">ระยะเก็บบันทึก</div><div class="val num">24</div>
+    <div class="foot">เดือน · เก็บแบบเขียนทับไม่ได้ (append-only)</div></div>
+</div>
+
+<div class="card mb16">
+  <div class="card-body" style="padding-bottom:4px">
+    <div class="grid g4" style="gap:10px">
+      <div class="field" style="margin-bottom:10px"><label for="aq">ค้นหา</label>
+        <input type="search" id="aq" placeholder="ผู้ใช้ รายการ หรือรายละเอียด"></div>
+      <div class="field" style="margin-bottom:10px"><label for="aAct">การกระทำ</label>
+        <select id="aAct"><option value="">ทั้งหมด</option>
+          ${Object.keys(ACT).map(k => `<option value="${k}">${ACT[k].t} (${k})</option>`).join('')}</select></div>
+      <div class="field" style="margin-bottom:10px"><label for="aUser">ผู้ใช้งาน</label>
+        <select id="aUser"><option value="">ทั้งหมด</option>
+          ${[...new Set(AUDIT.map(a => a.user))].map(u => `<option>${u}</option>`).join('')}</select></div>
+      <div class="field" style="margin-bottom:10px"><label for="aDate">ช่วงเวลา</label>
+        <select id="aDate"><option>7 วันล่าสุด</option><option>วันนี้</option><option>30 วันล่าสุด</option>
+          <option>กำหนดเอง…</option></select></div>
+    </div>
+  </div>
+</div>
+
+<div class="grid g-2-1">
+  <div class="card">
+    <div class="card-head"><h2 id="aCount">—</h2><span class="spacer"></span>
+      <span class="hint">คลิกแถวเพื่อดูค่าก่อน/หลัง</span></div>
+    <div class="table-wrap">
+      <table class="tbl">
+        <thead><tr><th>เวลา</th><th>ผู้ใช้งาน</th><th>การกระทำ</th><th>วัตถุ</th><th>รายละเอียด</th><th>IP</th></tr></thead>
+        <tbody id="aRows"></tbody>
+      </table>
+    </div>
+    <div class="card-foot">บันทึกสร้างอัตโนมัติด้วย trigger ระดับฐานข้อมูล จึงครอบคลุมการแก้ไขที่เข้ามาจากทุกช่องทาง
+      รวมถึงการแก้ไขผ่าน QGIS ที่เชื่อมต่อฐานข้อมูลโดยตรง</div>
+  </div>
+
+  <div class="stack">
+    <div class="card">
+      <div class="card-head"><h2>การกระทำแยกตามประเภท</h2></div>
+      <div class="card-body" id="actChart"></div>
+    </div>
+    <div class="card">
+      <div class="card-head"><h2>โครงสร้างบันทึก</h2></div>
+      <div class="card-body" style="padding-top:12px">
+        <div class="code-head">audit.change_log</div>
+<pre class="code dark"><span class="t">log_id</span>        <span class="k">bigserial</span>   <span class="c">-- ลำดับเหตุการณ์</span>
+<span class="t">occurred_at</span>   <span class="k">timestamptz</span> <span class="c">-- เวลาที่เกิด (UTC)</span>
+<span class="t">actor_uid</span>     <span class="k">uuid</span>        <span class="c">-- ผู้กระทำ</span>
+<span class="t">actor_role</span>    <span class="k">varchar</span>     <span class="c">-- กลุ่มสิทธิ์ขณะนั้น</span>
+<span class="t">action</span>        <span class="k">varchar</span>     <span class="c">-- CREATE/UPDATE/DELETE/…</span>
+<span class="t">schema_name</span>   <span class="k">varchar</span>
+<span class="t">table_name</span>    <span class="k">varchar</span>
+<span class="t">record_pk</span>     <span class="k">uuid</span>
+<span class="t">old_values</span>    <span class="k">jsonb</span>       <span class="c">-- ค่าก่อนแก้ไข</span>
+<span class="t">new_values</span>    <span class="k">jsonb</span>       <span class="c">-- ค่าหลังแก้ไข</span>
+<span class="t">changed_cols</span>  <span class="k">text[]</span>      <span class="c">-- คอลัมน์ที่เปลี่ยน</span>
+<span class="t">client_ip</span>     <span class="k">inet</span>
+<span class="t">user_agent</span>    <span class="k">text</span>
+<span class="t">request_id</span>    <span class="k">uuid</span>        <span class="c">-- เชื่อมกับ log ฝั่ง API</span></pre>
+        <p class="hint" style="margin-top:4px">ตารางนี้ให้สิทธิ์เฉพาะ INSERT เท่านั้น ไม่มีสิทธิ์ UPDATE/DELETE
+          แม้แต่ผู้ดูแลระบบ เพื่อให้บันทึกเชื่อถือได้</p>
+      </div>
+    </div>
+  </div>
+</div>
+`;
+
+function paintAudit() {
+  const q = document.getElementById('aq').value.trim().toLowerCase();
+  const ac = document.getElementById('aAct').value;
+  const us = document.getElementById('aUser').value;
+  const rows = AUDIT.filter(a =>
+    (!q || (a.user + a.obj + a.detail).toLowerCase().includes(q)) &&
+    (!ac || a.act === ac) && (!us || a.user === us));
+  document.getElementById('aCount').textContent = `${rows.length} เหตุการณ์`;
+  document.getElementById('aRows').innerHTML = rows.map((a, i) => `<tr data-i="${i}" style="cursor:pointer">
+    <td class="small nowrap mono">${a.ts}</td>
+    <td class="small">${a.user}<br><span class="xsmall muted">${ROLES[a.role].name}</span></td>
+    <td><span class="badge ${ACT[a.act].c}">${ACT[a.act].t}</span></td>
+    <td class="small mono">${a.obj}</td>
+    <td class="small">${a.detail}</td>
+    <td class="small mono muted">${a.ip}</td></tr>`).join('')
+    || `<tr><td colspan="6" class="center muted" style="padding:26px">ไม่พบเหตุการณ์ที่ตรงกับเงื่อนไข</td></tr>`;
+  document.querySelectorAll('#aRows tr[data-i]').forEach(tr => tr.onclick = () => showDetail(rows[+tr.dataset.i]));
+}
+
+function showDetail(a) {
+  modal(`${ACT[a.act].t} — ${a.obj}`,
+    `<dl class="kv" style="grid-template-columns:120px 1fr;margin-bottom:16px">
+       <dt>เวลา</dt><dd class="mono">${a.ts} (+07:00)</dd>
+       <dt>ผู้กระทำ</dt><dd>${a.user} · ${ROLES[a.role].name}</dd>
+       <dt>การกระทำ</dt><dd><span class="badge ${ACT[a.act].c}">${a.act}</span></dd>
+       <dt>วัตถุ</dt><dd class="mono">${a.obj}</dd>
+       <dt>ที่อยู่ IP</dt><dd class="mono">${a.ip}</dd>
+       <dt>Request ID</dt><dd class="mono xsmall">3f7a90c2-1b84-4e55-9c01-${Math.floor(Math.random() * 1e12).toString(16).padStart(12, '0')}</dd>
+     </dl>
+     <h3 class="mb8">ค่าก่อน/หลัง (JSONB)</h3>
+     <div class="grid g2" style="gap:10px">
+       <div><div class="code-head">old_values</div>
+<pre class="code" style="font-size:.72rem">{
+  "status_code": <span class="s">"active"</span>,
+  "updated_at": <span class="s">"2026-09-12T10:22+07"</span>,
+  "version_no": <span class="n">2</span>
+}</pre></div>
+       <div><div class="code-head">new_values</div>
+<pre class="code" style="font-size:.72rem">{
+  "status_code": <span class="s">"damaged"</span>,
+  "updated_at": <span class="s">"2026-10-29T08:52+07"</span>,
+  "version_no": <span class="n">3</span>
+}</pre></div>
+     </div>
+     <p class="hint">คอลัมน์ที่เปลี่ยน: <code>status_code</code>, <code>updated_at</code>, <code>version_no</code></p>`,
+    `<button class="btn" data-close>ปิด</button>
+     <button class="btn" onclick="toast('ย้อนกลับไปเวอร์ชันก่อนหน้า — สร้างเป็นเวอร์ชันใหม่ ไม่ลบประวัติ','history')"
+       data-only="admin">ย้อนกลับเวอร์ชัน</button>`);
+}
+
+['aq', 'aAct', 'aUser'].forEach(id => document.getElementById(id).addEventListener('input', paintAudit));
+paintAudit();
+
+const counts = {};
+AUDIT.forEach(a => counts[a.act] = (counts[a.act] || 0) + 1);
+const extra = { CREATE: 42, UPDATE: 54, EXPORT: 6, APPROVE: 21, SUBMIT: 28, REJECT: 4, QC_RUN: 3, DELETE: 2, GRANT: 2, PUBLISH: 1 };
+document.getElementById('actChart').innerHTML = barChart(
+  Object.keys(extra).map(k => ({ label: ACT[k].t, value: extra[k],
+    color: ['EXPORT', 'PUBLISH', 'GRANT'].includes(k) ? 'var(--s2)' : ['DELETE', 'REJECT'].includes(k) ? 'var(--s8)' : 'var(--s1)' }))
+    .sort((a, b) => b.value - a.value), ' ครั้ง')
+  + `<p class="small muted mt16" style="margin-bottom:0">การส่งออก การเผยแพร่ และการให้สิทธิ์
+     (แถบสีส้ม) เป็นเหตุการณ์ที่กำหนดให้ตรวจทานทุกเดือน</p>`;
+
+document.getElementById('btnFilter').onclick = () => toast('ตัวกรองขั้นสูง — ระบุตาราง คอลัมน์ที่เปลี่ยน ช่วงเวลา และ Request ID', 'filter');
+const bc = document.getElementById('btnCsv');
+if (bc) bc.onclick = () => toast('ส่งออกบันทึกการใช้งานเป็น CSV — การส่งออกครั้งนี้ถูกบันทึกลง Audit Log ด้วย', 'download');
+</script>
+</body>
+</html>
