@@ -154,8 +154,13 @@ function modal(title, bodyHTML, footHTML) {
 /* ---------- เมนูข้าง ---------- */
 let ACTIVE_HREF = '';
 
+/* ระบบแยกเป็นสองส่วน ส่วนระบบงานที่ผู้ใช้ทำงานจริง และส่วนเอกสารรายละเอียดระบบ
+   แต่ละส่วนใช้เมนูของตนเอง เพื่อไม่ให้คำอธิบายการออกแบบปนอยู่ในหน้าจอใช้งาน */
+function isDocPage(href) { return DOC_PAGES.includes(pageOf(href || ACTIVE_HREF)); }
+function activeNav() { return isDocPage() ? DOC_NAV : NAV; }
+
 function sidebarHTML() {
-  return NAV.map(g => `
+  return activeNav().map(g => `
     <div class="nav-group">
       <div class="nav-label">${g.label}</div>
       ${g.items.map(i => canAccess(i.href)
@@ -167,7 +172,7 @@ function sidebarHTML() {
     <div class="nav-group" style="padding:0 10px">
       <div class="xsmall muted" style="border-top:1px solid var(--line);padding-top:12px;line-height:1.5">
         ${APP.name} ${APP.version}<br>${APP.db}<br>
-        <span style="color:var(--ink-3)">ข้อมูลตัวอย่างเพื่อการนำเสนอ</span>
+        <span style="color:var(--ink-3)">${isDocPage() ? 'ส่วนเอกสารรายละเอียดระบบ' : 'ข้อมูลตัวอย่างเพื่อการนำเสนอ'}</span>
       </div>
     </div>`;
 }
@@ -189,7 +194,7 @@ function renderShell(activeHref) {
   top.className = 'topbar';
   top.innerHTML = `
     <button class="iconbtn hamburger" data-nav-toggle aria-label="เปิดเมนู">${icon('menu')}</button>
-    <a class="brand" href="index.html">
+    <a class="brand" href="${isDocPage() ? 'index.html' : 'dashboard.html'}">
       <span class="mark">${icon('map')}</span>
       <span class="brand-txt">${APP.name}<small>Local Government GIS</small></span>
     </a>
@@ -198,7 +203,11 @@ function renderShell(activeHref) {
       ${icon('search')}
       <input type="search" placeholder="ค้นหารายการ ถนน พิกัด หรือรหัสข้อมูล…" aria-label="ค้นหาทั้งระบบ" data-gsearch>
     </div>
-    <button class="pill-role" data-role-pill data-role-switch aria-label="สลับกลุ่มสิทธิ์"></button>
+    ${isDocPage()
+      ? `<a class="btn btn-sm" href="dashboard.html" title="กลับไปยังหน้าจอใช้งานระบบ">${icon('gauge')} <span class="hide-sm">หน้าจอใช้งานระบบ</span></a>`
+      : `<a class="btn btn-sm" href="system-detail.html#${pageOf(activeHref)}" target="_blank" rel="noopener"
+             title="เปิดรายละเอียดระบบงานและเอกสารออกแบบในแท็บใหม่">${icon('book')} <span class="hide-sm">รายละเอียดระบบ</span></a>`}
+    ${isDocPage() ? '' : `<button class="pill-role" data-role-pill data-role-switch aria-label="สลับกลุ่มสิทธิ์"></button>`}
     <button class="iconbtn" data-theme-toggle aria-label="สลับธีมสว่าง/มืด"><span data-theme-icon></span></button>
     <button class="iconbtn" data-notif aria-label="การแจ้งเตือน">${icon('bell')}</button>
     <span class="avatar" data-role-avatar title="บัญชีผู้ใช้"></span>`;
@@ -227,7 +236,8 @@ function renderShell(activeHref) {
   });
   top.querySelector('[data-theme-toggle]').addEventListener('click', () =>
     setTheme(currentTheme() === 'dark' ? 'light' : 'dark'));
-  top.querySelector('[data-role-switch]').addEventListener('click', openRoleSwitcher);
+  const rs = top.querySelector('[data-role-switch]');
+  if (rs) rs.addEventListener('click', openRoleSwitcher);
   top.querySelector('[data-notif]').addEventListener('click', () => modal('การแจ้งเตือน',
     `<ul class="tl">
       <li class="now"><div class="tt">ข้อค้นพบ QC ระดับวิกฤต 2 รายการ</div><div class="td">ชั้นข้อมูล L05 — ฟิลด์บังคับว่าง · 29 ต.ค. 2569 07:58</div></li>

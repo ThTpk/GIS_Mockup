@@ -21,10 +21,10 @@ const root = document.getElementById('root');
 
 root.innerHTML = `
 ${pageHead({
-  crumbs: ['<a href="index.html">หน้าแรก</a>', 'ทะเบียนชั้นข้อมูล'],
+  crumbs: ['<a href="dashboard.html">หน้าแรก</a>', 'ทะเบียนชั้นข้อมูล'],
   title: 'ทะเบียนชั้นข้อมูล',
   badge: badge('10 ชั้นข้อมูล', 'info'),
-  sub: 'ชั้นข้อมูลใหม่ 8 ชั้นจากการสำรวจ และชั้นข้อมูลเดิมที่เชื่อมโยง 2 ชั้น รวมเป็นชุดใช้งานไม่น้อยกว่า 10 ชั้นข้อมูล',
+  sub: 'ชั้นข้อมูลใหม่ 8 ชั้นจากการสำรวจ และชั้นข้อมูลเดิมที่เชื่อมโยง 2 ชั้น',
   actions: `<a class="btn" href="import.html" data-need="write">${icon('upload')} นำเข้าข้อมูล</a>
             <button class="btn" id="btnExport">${icon('download')} ส่งออกทะเบียน</button>
             <button class="btn btn-primary" data-only="admin" id="btnNew">${icon('plus')} ขึ้นทะเบียนชั้นข้อมูล</button>`
@@ -32,7 +32,7 @@ ${pageHead({
 
 <div class="grid g4 mb16">
   <div class="stat"><div class="lbl">ชั้นข้อมูลใหม่จากการสำรวจ</div><div class="val num">8</div>
-    <div class="foot">ขั้นต่ำตามขอบเขตงาน 8 ชั้น</div></div>
+    <div class="foot">สำรวจและจัดทำขึ้นใหม่ทั้งหมด</div></div>
   <div class="stat"><div class="lbl">ชั้นข้อมูลเดิมที่เชื่อมโยง</div><div class="val num">2</div>
     <div class="foot">แนวเขตที่ดิน · สิ่งปลูกสร้าง</div></div>
   <div class="stat"><div class="lbl">รายการข้อมูลรวม</div><div class="val num" id="sTotal">—</div>
@@ -63,9 +63,6 @@ ${pageHead({
       <tbody id="rows"></tbody>
     </table>
   </div>
-  <div class="card-foot">ชั้นข้อมูลทุกชั้นใช้ชุดฟิลด์มาตรฐานเดียวกัน 21 ฟิลด์
-    (รหัสไม่ซ้ำ แหล่งข้อมูล วันที่สำรวจ หน่วยงานรับผิดชอบ สถานะการยืนยัน และคำอธิบายข้อมูล)
-    ดูรายละเอียดที่ <a href="data-dictionary.html">พจนานุกรมข้อมูล</a></div>
 </div>
 
 <div class="grid g2">
@@ -117,7 +114,6 @@ function paint(group) {
       <td><div class="cell-actions">
         <a class="btn btn-sm btn-ghost" href="map.html" title="ดูบนแผนที่">${icon('map')}</a>
         <a class="btn btn-sm btn-ghost" href="metadata.html" title="Metadata">${icon('tag')}</a>
-        <a class="btn btn-sm btn-ghost" href="data-dictionary.html" title="พจนานุกรมข้อมูล">${icon('book')}</a>
       </div></td>
     </tr>`).join('');
 }
@@ -150,8 +146,8 @@ if (bn) bn.onclick = () => modal('ขึ้นทะเบียนชั้น�
      <div class="field"><label>กลุ่ม</label><select><option>โครงสร้างพื้นฐาน</option><option>สาธารณูปโภค</option><option>พื้นที่และการใช้ประโยชน์</option></select></div>
    </div>
    <div class="field"><label>ความแม่นยำตำแหน่งเป้าหมาย (เมตร)</label><input type="number" value="1.5" step="0.1"></div>
-   <p class="hint">ระบบจะสร้างตารางพร้อมชุดฟิลด์มาตรฐาน 21 ฟิลด์ ดัชนี GiST และ trigger บันทึกประวัติให้อัตโนมัติ</p>`,
-  `<button class="btn" data-close>ยกเลิก</button><button class="btn btn-primary" data-close onclick="toast('ขึ้นทะเบียนชั้นข้อมูลเรียบร้อย — ต้องให้ผู้ว่าจ้างเห็นชอบรายการก่อนเริ่มเก็บข้อมูล','check')">สร้างชั้นข้อมูล</button>`);
+   <p class="hint">ชั้นข้อมูลใหม่จะใช้ชุดฟิลด์มาตรฐานเดียวกับชั้นข้อมูลอื่นโดยอัตโนมัติ</p>`,
+  `<button class="btn" data-close>ยกเลิก</button><button class="btn btn-primary" data-close onclick="toast('ขึ้นทะเบียนชั้นข้อมูลเรียบร้อย — รอการอนุมัติก่อนเริ่มเก็บข้อมูล','check')">สร้างชั้นข้อมูล</button>`);
 </script>
 </body>
 </html>

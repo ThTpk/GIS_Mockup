@@ -10,16 +10,43 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="assets/css/app.css">
+<style>
+  .gate { display: grid; grid-template-columns: repeat(auto-fit, minmax(310px, 1fr)); gap: 18px; }
+  .gate a { display: flex; flex-direction: column; gap: 10px; padding: 24px 24px 22px;
+    border: 1px solid var(--line); border-radius: var(--r-lg); background: var(--surface-1);
+    color: var(--ink-1); box-shadow: var(--shadow-sm); }
+  .gate a:hover { border-color: var(--line-strong); box-shadow: var(--shadow-md); text-decoration: none; }
+  .gate .ic { width: 42px; height: 42px; border-radius: var(--r-md); display: grid; place-items: center;
+    background: var(--accent-wash); color: var(--s1); }
+  .gate .ic svg { width: 21px; height: 21px; }
+  .gate a.docs .ic { background: var(--surface-3); color: var(--ink-2); }
+  .gate h2 { font-size: 1.08rem; margin: 0; }
+  .gate p { font-size: .86rem; color: var(--ink-3); margin: 0; line-height: 1.62; }
+  .gate ul { margin: 2px 0 0; padding-left: 17px; font-size: .8rem; color: var(--ink-3); line-height: 1.7; }
+  .gate .cta { margin-top: auto; padding-top: 12px; font-size: .84rem; font-weight: 650; color: var(--s1); }
+  .topline { display: flex; align-items: center; gap: 10px; padding: 14px 0 26px; }
+  .topline .mark { width: 34px; height: 34px; border-radius: var(--r-md); display: grid; place-items: center;
+    background: var(--b500); color: #fff; }
+  .topline .mark svg { width: 18px; height: 18px; }
+  .topline .nm { font-weight: 700; letter-spacing: -.01em; }
+  .topline .sb { font-size: .7rem; color: var(--ink-3); letter-spacing: .07em; text-transform: uppercase; }
+</style>
 </head>
 <body>
-<main class="content"><div class="content-inner">
+<main class="content"><div class="content-inner" style="max-width:1020px;margin:0 auto">
 
-<section class="hero">
+<div class="topline">
+  <span class="mark" id="mark"></span>
+  <span><span class="nm">GeoCore GIS</span><br><span class="sb">Local Government GIS</span></span>
+  <span style="flex:1"></span>
+  <button class="iconbtn" data-theme-toggle aria-label="สลับธีมสว่าง/มืด"><span data-theme-icon></span></button>
+</div>
+
+<section class="hero" style="padding-bottom:28px">
   <span class="badge badge-info">ต้นแบบหน้าจอ (Mockup) · ข้อมูลตัวอย่างทั้งหมดเป็นข้อมูลสมมุติ</span>
   <h1 class="mt8">ระบบสารสนเทศภูมิศาสตร์<br>เพื่อการบริหารจัดการพื้นที่</h1>
-  <p class="lead">ต้นแบบหน้าจอชุดนี้แสดงขอบเขตการทำงานทั้งหมดของระบบ ตั้งแต่การสำรวจและบันทึกข้อมูลภาคสนาม
-    การตรวจคุณภาพข้อมูล การแสดงผลบนแผนที่ ไปจนถึงการส่งมอบและเผยแพร่ชุดข้อมูล
-    พร้อมข้อกำหนด Use Case เอกสารการออกแบบฐานข้อมูล พจนานุกรมข้อมูล และข้อกำหนดการเชื่อมต่อ (API)</p>
+  <p class="lead">ต้นแบบชุดนี้แยกเป็นสองส่วน ส่วนแรกคือหน้าจอที่เจ้าหน้าที่ใช้ทำงานจริง
+    ส่วนที่สองคือเอกสารรายละเอียดระบบและการออกแบบ สำหรับคณะกรรมการและทีมพัฒนา</p>
   <div class="meta">
     <span class="badge badge-outline">ฐานข้อมูล PostgreSQL 16 + PostGIS 3.4</span>
     <span class="badge badge-outline">ชั้นข้อมูล 10 ชั้น</span>
@@ -27,173 +54,11 @@
     <span class="badge badge-outline">Responsive — ใช้งานบนมือถือได้</span>
     <span class="badge badge-outline">มาตรฐาน OGC · ISO 19115 · PDPA</span>
   </div>
-  <div class="row mt24">
-    <a class="btn btn-primary btn-lg" href="dashboard.html">เข้าสู่ระบบตัวอย่าง</a>
-    <a class="btn btn-lg" href="map.html">ดูหน้าแผนที่</a>
-    <a class="btn btn-lg" href="usecase-spec.html">ข้อกำหนด Use Case</a>
-    <a class="btn btn-lg" href="db-design.html">การออกแบบฐานข้อมูล</a>
-  </div>
 </section>
 
-<!-- ===== กลุ่มผู้ใช้งาน ===== -->
-<h2 class="mb8">กลุ่มผู้ใช้งานและสิทธิ์</h2>
-<p class="dim small mb16">ระบบแยกสิทธิ์เป็น 3 กลุ่มหลักตามลักษณะงาน และเพิ่มกลุ่มผู้ดูแลระบบสำหรับงานตั้งค่าและกำกับดูแล
-  สลับกลุ่มสิทธิ์เพื่อทดลองดูความแตกต่างได้จากปุ่มมุมขวาบนทุกหน้า</p>
-<div class="grid g4 mb24" id="roleCards"></div>
+<div class="gate mb24" id="gate"></div>
 
-<!-- ===== สถาปัตยกรรม ===== -->
-<div class="card mb24">
-  <div class="card-head"><h2>สถาปัตยกรรมระบบโดยสังเขป</h2><span class="spacer"></span>
-    <span class="hint">ภาพที่ 1 — ภาพรวมองค์ประกอบระบบ</span></div>
-  <div class="card-body">
-    <div class="erd-scroll">
-      <svg viewBox="0 0 960 420" role="img" aria-label="แผนภาพสถาปัตยกรรมระบบ 4 ชั้น: ผู้ใช้งาน, การนำเสนอ, บริการ, ข้อมูล">
-        <defs>
-          <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
-            <path d="M0 0 L10 5 L0 10 z" fill="var(--line-strong)"/>
-          </marker>
-          <style>
-            .bx { fill: var(--surface-1); stroke: var(--line-strong); stroke-width: 1.2; }
-            .lane { fill: var(--surface-2); stroke: var(--line); stroke-width: 1; }
-            .lt { font: 600 11px var(--font); fill: var(--ink-3); letter-spacing: .06em; text-transform: uppercase; }
-            .bt { font: 600 12.5px var(--font); fill: var(--ink-1); }
-            .bs { font: 400 10.5px var(--font); fill: var(--ink-3); }
-            .ln { stroke: var(--line-strong); stroke-width: 1.3; fill: none; marker-end: url(#ah); }
-            .lnl { font: 500 9.5px var(--mono); fill: var(--ink-3); }
-          </style>
-        </defs>
-
-        <!-- lane 1: users -->
-        <rect class="lane" x="10" y="10" width="940" height="82" rx="10"/>
-        <text class="lt" x="24" y="30">1 · ผู้ใช้งาน</text>
-        <g>
-          <rect class="bx" x="40"  y="38" width="188" height="40" rx="8"/>
-          <text class="bt" x="56" y="56">ผู้อ่านข้อมูล</text><text class="bs" x="56" y="70">ผู้บริหาร · เจ้าหน้าที่กองอื่น</text>
-          <rect class="bx" x="252" y="38" width="188" height="40" rx="8"/>
-          <text class="bt" x="268" y="56">ผู้ป้อนข้อมูล</text><text class="bs" x="268" y="70">เจ้าหน้าที่สำรวจภาคสนาม</text>
-          <rect class="bx" x="464" y="38" width="188" height="40" rx="8"/>
-          <text class="bt" x="480" y="56">ผู้ใช้งานทั้งสองสิทธิ์</text><text class="bs" x="480" y="70">ผู้ตรวจสอบ/อนุมัติข้อมูล</text>
-          <rect class="bx" x="676" y="38" width="236" height="40" rx="8"/>
-          <text class="bt" x="692" y="56">ผู้ดูแลระบบ · ประชาชน (ยื่นข้อเสนอ)</text>
-          <text class="bs" x="692" y="70">ตั้งค่าระบบ · ข้อเสนอผ่านช่องทางสาธารณะ</text>
-        </g>
-
-        <!-- lane 2: presentation -->
-        <rect class="lane" x="10" y="108" width="940" height="82" rx="10"/>
-        <text class="lt" x="24" y="128">2 · ชั้นการนำเสนอ</text>
-        <rect class="bx" x="40"  y="136" width="208" height="40" rx="8"/>
-        <text class="bt" x="56" y="154">Web GIS (Responsive)</text><text class="bs" x="56" y="168">แผนที่ · ตาราง · แดชบอร์ด</text>
-        <rect class="bx" x="272" y="136" width="208" height="40" rx="8"/>
-        <text class="bt" x="288" y="154">แอปสำรวจบนมือถือ</text><text class="bs" x="288" y="168">ทำงานออฟไลน์ · ซิงก์ภายหลัง</text>
-        <rect class="bx" x="504" y="136" width="196" height="40" rx="8"/>
-        <text class="bt" x="520" y="154">QGIS / ArcGIS Desktop</text><text class="bs" x="520" y="168">เชื่อมผ่าน WMS/WFS · GeoPackage</text>
-        <rect class="bx" x="724" y="136" width="188" height="40" rx="8"/>
-        <text class="bt" x="740" y="154">ชุดข้อมูลเปิด</text><text class="bs" x="740" y="168">ชุดเผยแพร่ที่ตัดข้อมูลอ่อนไหว</text>
-
-        <!-- lane 3: services -->
-        <rect class="lane" x="10" y="206" width="940" height="100" rx="10"/>
-        <text class="lt" x="24" y="226">3 · ชั้นบริการ (REST API / OGC)</text>
-        <rect class="bx" x="40"  y="234" width="150" height="58" rx="8"/>
-        <text class="bt" x="54" y="256">API Gateway</text><text class="bs" x="54" y="270">OAuth 2.0 / OIDC</text><text class="bs" x="54" y="283">Rate limit · Audit</text>
-        <rect class="bx" x="206" y="234" width="162" height="58" rx="8"/>
-        <text class="bt" x="220" y="256">Feature Service</text><text class="bs" x="220" y="270">CRUD · Workflow</text><text class="bs" x="220" y="283">Versioning · Attachment</text>
-        <rect class="bx" x="384" y="234" width="162" height="58" rx="8"/>
-        <text class="bt" x="398" y="256">Spatial Service</text><text class="bs" x="398" y="270">วิเคราะห์เชิงพื้นที่</text><text class="bs" x="398" y="283">ST_* ประมวลผลในฐานข้อมูล</text>
-        <rect class="bx" x="562" y="234" width="162" height="58" rx="8"/>
-        <text class="bt" x="576" y="256">Tile &amp; Map Service</text><text class="bs" x="576" y="270">ST_AsMVT · WMS/WFS</text><text class="bs" x="576" y="283">แคชไทล์</text>
-        <rect class="bx" x="740" y="234" width="172" height="58" rx="8"/>
-        <text class="bt" x="754" y="256">QC &amp; Export Worker</text><text class="bs" x="754" y="270">ตรวจคุณภาพตามกฎ</text><text class="bs" x="754" y="283">GeoPackage · PDF · XLSX</text>
-
-        <!-- lane 4: data -->
-        <rect class="lane" x="10" y="322" width="940" height="88" rx="10"/>
-        <text class="lt" x="24" y="342">4 · ชั้นข้อมูล</text>
-        <rect class="bx" x="40" y="350" width="300" height="48" rx="8" fill="var(--accent-wash)" stroke="var(--accent)"/>
-        <text class="bt" x="56" y="370">PostgreSQL 16 + PostGIS 3.4</text>
-        <text class="bs" x="56" y="385">schema: gis · ref · app · qc · audit · plan</text>
-        <rect class="bx" x="356" y="350" width="196" height="48" rx="8"/>
-        <text class="bt" x="372" y="370">Object Storage</text><text class="bs" x="372" y="385">ภาพถ่ายสำรวจ · ไฟล์แนบ · ไฟล์ส่งออก</text>
-        <rect class="bx" x="568" y="350" width="166" height="48" rx="8"/>
-        <text class="bt" x="584" y="370">แผนที่ฐาน</text><text class="bs" x="584" y="385">ภาพถ่ายทางอากาศ · OSM</text>
-        <rect class="bx" x="750" y="350" width="162" height="48" rx="8"/>
-        <text class="bt" x="766" y="370">สำรองข้อมูล</text><text class="bs" x="766" y="385">PITR รายวัน · เก็บ 30 รุ่น</text>
-
-        <!-- connectors -->
-        <path class="ln" d="M134 78 L134 132"/>
-        <path class="ln" d="M346 78 L376 132"/>
-        <path class="ln" d="M558 78 L600 132"/>
-        <path class="ln" d="M794 78 L818 132"/>
-        <path class="ln" d="M144 176 L115 230"/>
-        <path class="ln" d="M376 176 L287 230"/>
-        <path class="ln" d="M602 176 L643 230"/>
-        <path class="ln" d="M818 176 L826 230"/>
-        <text class="lnl" x="150" y="212">HTTPS / JWT</text>
-        <path class="ln" d="M115 292 L160 346"/>
-        <path class="ln" d="M287 292 L210 346"/>
-        <path class="ln" d="M465 292 L250 346"/>
-        <path class="ln" d="M643 292 L300 346"/>
-        <path class="ln" d="M826 292 L452 346"/>
-      </svg>
-    </div>
-    <p class="small muted mt16" style="margin-bottom:0">การวิเคราะห์เชิงพื้นที่ทั้งหมดประมวลผลด้วยฟังก์ชัน PostGIS
-      ในฐานข้อมูลโดยตรง ไม่ดึงข้อมูลทั้งชั้นขึ้นมาคำนวณฝั่งผู้ใช้ และแสดงผลด้วย Vector Tile เพื่อให้เปิดบนมือถือได้เร็ว</p>
-  </div>
-</div>
-
-<!-- ===== สารบัญหน้าจอ ===== -->
-<h2 class="mb8">สารบัญหน้าจอทั้งหมด</h2>
-<p class="dim small mb16">หน้าจอต้นแบบ 22 หน้า แบ่งเป็นหน้าใช้งานจริง 16 หน้า และเอกสารการออกแบบระบบ 6 หน้า</p>
-<div class="screengrid mb24" id="screenGrid"></div>
-
-<!-- ===== ความครอบคลุมตามขอบเขตงาน ===== -->
-<div class="card mb24">
-  <div class="card-head"><h2>ความครอบคลุมตามข้อกำหนดขอบเขตของงาน</h2><span class="spacer"></span>
-    <span class="hint">ตารางที่ 1 — การเชื่อมโยงข้อกำหนดกับหน้าจอระบบ</span></div>
-  <div class="table-wrap">
-    <table class="tbl">
-      <thead><tr><th style="width:200px">ข้อกำหนด</th><th>สิ่งที่ระบบรองรับ</th><th style="width:220px">หน้าจอที่เกี่ยวข้อง</th></tr></thead>
-      <tbody>
-        <tr><td>จัดทำชั้นข้อมูลใหม่ไม่น้อยกว่า 8 ชั้น และเชื่อมโยงชั้นข้อมูลเดิม 2 ชั้น รวม 10 ชั้น</td>
-            <td>ทะเบียนชั้นข้อมูล 10 ชั้น พร้อมประเภทรูปทรง จำนวนรายการ ความครบถ้วน และสถานะการอนุมัติรายชั้น</td>
-            <td><a href="layers.html">ทะเบียนชั้นข้อมูล</a> · <a href="map.html">แผนที่</a></td></tr>
-        <tr><td>ชั้นข้อมูลถนนต้องจำแนกหน่วยงาน แยกเจ้าของทรัพย์สิน ผู้บำรุงรักษา และสถานะการยืนยัน</td>
-            <td>ฟิลด์ <code>owner_agency_id</code>, <code>maintainer_agency_id</code> และ <code>confirm_status_code</code> แยกกัน
-                พร้อมตัวกรองและสรุปรายหน่วยงาน ไม่สรุปจากการสังเกตภาคสนามเพียงอย่างเดียว</td>
-            <td><a href="attribute-table.html">ตารางข้อมูล</a> · <a href="data-entry.html">บันทึกข้อมูล</a></td></tr>
-        <tr><td>กำหนดระบบพิกัด หน่วย วิธีเก็บ และความแม่นยำเป้าหมายของแต่ละชั้นข้อมูล</td>
-            <td>บันทึกระบบพิกัด ความแม่นยำเป้าหมาย และความแม่นยำที่วัดได้รายรายการ ใน Metadata และฟิลด์ <code>positional_accuracy_m</code></td>
-            <td><a href="metadata.html">Metadata</a> · <a href="data-dictionary.html">พจนานุกรมข้อมูล</a></td></tr>
-        <tr><td>ทุกรายการต้องมีรหัสไม่ซ้ำ แหล่งข้อมูล วันที่สำรวจ หน่วยงานรับผิดชอบหรือสถานะรอยืนยัน และคำอธิบายข้อมูล</td>
-            <td>ชุดฟิลด์มาตรฐาน 21 ฟิลด์ที่บังคับใช้กับทุกชั้นข้อมูล พร้อมข้อจำกัดระดับฐานข้อมูล (UNIQUE, NOT NULL, CHECK)</td>
-            <td><a href="data-dictionary.html">พจนานุกรมข้อมูล</a> · <a href="db-design.html">การออกแบบฐานข้อมูล</a></td></tr>
-        <tr><td>ตรวจสอบความครบถ้วนของฟิลด์บังคับ ความซ้ำซ้อน พิกัด และความสัมพันธ์เชิงพื้นที่ พร้อมรายงานผลตรวจคุณภาพ</td>
-            <td>กฎการตรวจคุณภาพ 12 กฎใน 6 หมวด เรียกตรวจได้ทั้งแบบตามรอบและตามคำสั่ง พร้อมรายงานและการติดตามการแก้ไข</td>
-            <td><a href="qc.html">ตรวจคุณภาพข้อมูล</a></td></tr>
-        <tr><td>นำเข้าและเชื่อมโยงข้อมูลเดิมที่หน่วยงานมีอยู่แล้ว โดยไม่จัดทำซ้ำ</td>
-            <td>นำเข้าไฟล์ GeoJSON, KML/KMZ และ Shapefile (ZIP) รองรับรูปทรงทั้งสามแบบ คือจุด เส้น และรูปปิด
-                พร้อมแปลงระบบพิกัดเป็น EPSG:4326 จับคู่ฟิลด์กับชุดฟิลด์มาตรฐาน และตรวจคุณภาพก่อนบันทึก</td>
-            <td><a href="import.html">นำเข้าข้อมูลจากไฟล์</a></td></tr>
-        <tr><td>ส่งมอบ GeoPackage, โครงการ QGIS, แผนที่ PDF, ตาราง XLSX/CSV, พจนานุกรมข้อมูล, Metadata, สัญลักษณ์, คู่มือ และบัญชีไฟล์</td>
-            <td>หน้าส่งออกรวมทุกรูปแบบในชุดเดียว พร้อมบัญชีไฟล์ (manifest) รุ่นข้อมูล และใช้พาธสัมพัทธ์เพื่อย้ายเครื่องได้</td>
-            <td><a href="export.html">ส่งออกและเผยแพร่</a></td></tr>
-        <tr><td>แยกฐานข้อมูลใช้งานภายในกับชุดเผยแพร่ที่ตัดข้อมูลส่วนบุคคลและข้อมูลความปลอดภัย</td>
-            <td>โปรไฟล์การเผยแพร่ 3 โปรไฟล์ ตัดชั้นข้อมูล CCTV และฟิลด์อ่อนไหวอัตโนมัติ พร้อมรายการเปรียบเทียบก่อนเผยแพร่</td>
-            <td><a href="export.html">ส่งออกและเผยแพร่</a></td></tr>
-        <tr><td>จัดทำบัญชีพื้นที่ที่แนวเขตยังไม่ยุติ และข้อเสนอให้ข้อมูลแนวเขตสอดคล้องกัน</td>
-            <td>เปรียบเทียบแนวเขตตามเอกสารอ้างอิงกับแนวเขตจัดเก็บจริง คำนวณพื้นที่คลาดเคลื่อน จำนวนแปลงและอาคารที่กระทบ</td>
-            <td><a href="boundary.html">วิเคราะห์แนวเขต</a></td></tr>
-        <tr><td>เสนอระบบติดตามผล ตัวชี้วัด รอบทบทวนแผน ผู้รับผิดชอบปรับปรุงข้อมูล และแนวทางสำรองข้อมูล</td>
-            <td>ตัวชี้วัด 8 ตัวพร้อมเป้าหมายและรอบการวัด ตารางผู้รับผิดชอบรายชั้นข้อมูล และนโยบายสำรอง/ส่งต่อฐานข้อมูล</td>
-            <td><a href="monitoring.html">ตัวชี้วัดและการติดตาม</a></td></tr>
-        <tr><td>ฝึกอบรมเจ้าหน้าที่ให้เปิด แก้ไข ค้นหา วิเคราะห์ และปรับปรุงฐานข้อมูลได้</td>
-            <td>หน้าจอออกแบบให้ใช้งานได้โดยไม่ต้องติดตั้งโปรแกรม พร้อมคู่มือในระบบ และยังส่งมอบโครงการ QGIS สำหรับงานขั้นสูง</td>
-            <td><a href="map.html">แผนที่</a> · <a href="export.html">ส่งออก</a></td></tr>
-      </tbody>
-    </table>
-  </div>
-</div>
-
-<!-- ===== ขอบเขตที่ไม่รวม ===== -->
-<div class="notice notice-warn mb24" id="scopeNote"></div>
+<div class="notice notice-info mb24" id="howto"></div>
 
 <footer class="small muted center" style="padding:24px 0">
   GeoCore GIS — ต้นแบบหน้าจอเพื่อการนำเสนอโครงการ · ข้อมูลตัวอย่างทั้งหมดเป็นข้อมูลสมมุติ ไม่ใช่ข้อมูลของหน่วยงานใด<br>
@@ -205,61 +70,45 @@
 <script src="assets/js/data.js"></script>
 <script src="assets/js/shell.js"></script>
 <script>
-renderShell('index.html');
+/* หน้านี้เป็นทางเข้า ไม่ใช่หน้าจอใช้งาน จึงไม่เรียก renderShell() และไม่มีเมนูข้าง */
+document.getElementById('mark').innerHTML = icon('map');
+setTheme(localStorage.getItem('geocore.theme') || 'auto');
+document.querySelector('[data-theme-toggle]').addEventListener('click', () =>
+  setTheme(currentTheme() === 'dark' ? 'light' : 'dark'));
 
-/* role cards */
-document.getElementById('roleCards').innerHTML = Object.values(ROLES).map(r => `
-  <div class="card"><div class="card-body">
-    <div class="row row-tight" style="margin-bottom:6px">
-      <span style="width:9px;height:9px;border-radius:50%;background:${r.color}"></span>
-      <strong>${r.name}</strong>
-    </div>
-    <div class="xsmall muted mb8">${r.en}</div>
-    <p class="small dim" style="min-height:44px">${r.desc}</p>
-    <div class="xsmall" style="font-weight:650;color:var(--good-ink);margin-top:6px">ทำได้</div>
-    <ul class="xsmall dim" style="padding-left:16px;margin:3px 0 8px">${r.can.map(c => `<li>${c}</li>`).join('')}</ul>
-    <div class="xsmall" style="font-weight:650;color:var(--critical)">ทำไม่ได้</div>
-    <ul class="xsmall dim" style="padding-left:16px;margin:3px 0 0">${r.cannot.map(c => `<li>${c}</li>`).join('')}</ul>
-  </div></div>`).join('');
+const opCount = NAV.reduce((n, g) => n + g.items.length, 0) + 1;   /* รวมหน้าเข้าสู่ระบบ */
 
-/* screen index */
-const SCREENS = [
-  ['dashboard.html','gauge','แดชบอร์ดผู้บริหาร','ตัวเลขสรุปภาพรวม ความครบถ้วนรายชั้นข้อมูล และงานคงค้าง'],
-  ['map.html','map','แผนที่และชั้นข้อมูล','เปิด/ปิดชั้นข้อมูล ค้นหา วัดระยะ และดูรายละเอียดรายการ'],
-  ['layers.html','layers','ทะเบียนชั้นข้อมูล','ชั้นข้อมูล 10 ชั้น พร้อมแหล่งที่มา ความครบถ้วน และสถานะ'],
-  ['attribute-table.html','table','ตารางข้อมูล','กรอง เรียง แก้ไขในตาราง และส่งออกเฉพาะที่กรองไว้'],
-  ['data-entry.html','pencil','บันทึก/แก้ไขข้อมูล','ฟอร์มพร้อมการตรวจค่า เลือกพิกัดบนแผนที่ และแนบภาพถ่าย'],
-  ['mobile-survey.html','mobile','สำรวจภาคสนาม','หน้าจอมือถือ ทำงานออฟไลน์ และซิงก์เมื่อมีสัญญาณ'],
-  ['import.html','upload','นำเข้าข้อมูลจากไฟล์','GeoJSON, KML และ Shapefile รองรับทั้งจุด เส้น และรูปปิด'],
-  ['review.html','check','คิวตรวจสอบและอนุมัติ','เปรียบเทียบค่าก่อน/หลัง อนุมัติหรือตีกลับพร้อมเหตุผล'],
-  ['qc.html','shield','ตรวจคุณภาพข้อมูล','กฎการตรวจ 12 กฎ ผลตรวจ และการติดตามการแก้ไข'],
-  ['boundary.html','target','วิเคราะห์แนวเขต','พื้นที่คลาดเคลื่อนระหว่างแนวเขตอ้างอิงกับแนวเขตจัดเก็บจริง'],
-  ['export.html','download','ส่งออกและเผยแพร่','GeoPackage, QGIS, PDF, XLSX พร้อมบัญชีไฟล์และชุดเผยแพร่'],
-  ['metadata.html','tag','Metadata ชุดข้อมูล','รายการ Metadata ตาม ISO 19115 และสายข้อมูล'],
-  ['monitoring.html','chart','ตัวชี้วัดและการติดตาม','ตัวชี้วัด 8 ตัว รอบทบทวน ผู้รับผิดชอบ และการสำรองข้อมูล'],
-  ['users.html','users','ผู้ใช้งานและสิทธิ์','ตารางสิทธิ์ 20 รายการเทียบ 4 กลุ่มผู้ใช้งาน'],
-  ['audit-log.html','history','บันทึกการใช้งาน','ใครทำอะไร เมื่อไร กับข้อมูลใด พร้อมค่าก่อน/หลัง'],
-  ['login.html','lock','หน้าเข้าสู่ระบบ','เข้าสู่ระบบและเลือกกลุ่มสิทธิ์สำหรับการสาธิต'],
-  ['usecase-spec.html','check','ข้อกำหนด Use Case','การทำงาน 57 กรณี พร้อมผู้กระทำ ลำดับเหตุการณ์ และกฎการทำงาน'],
-  ['db-design.html','db','การออกแบบฐานข้อมูล','ผังความสัมพันธ์ ตารางทั้งหมด ดัชนี และสคริปต์ SQL'],
-  ['data-dictionary.html','book','พจนานุกรมข้อมูล','ชุดฟิลด์มาตรฐานและฟิลด์เฉพาะของทั้ง 10 ชั้นข้อมูล'],
-  ['api-list.html','plug','รายการ API','109 endpoint ใน 14 กลุ่มงาน พร้อมสิทธิ์ที่เรียกใช้ได้'],
-  ['api-spec.html','code','ข้อกำหนด API','รายละเอียดคำขอ/คำตอบ รหัสข้อผิดพลาด และตัวอย่าง JSON'],
-  ['design-system.html','palette','ระบบการออกแบบ','สี ตัวอักษร องค์ประกอบหน้าจอ และการรองรับการเข้าถึง']
-];
-document.getElementById('screenGrid').innerHTML = SCREENS.map((s, i) => `
-  <a class="screencard" href="${s[0]}">
-    <span class="num-tag">${String(i + 1).padStart(2, '0')}</span>
-    <span class="ic">${icon(s[1])}</span>
-    <h3>${s[2]}</h3><p>${s[3]}</p></a>`).join('');
+document.getElementById('gate').innerHTML = `
+  <a href="dashboard.html">
+    <span class="ic">${icon('gauge')}</span>
+    <h2>ตัวอย่างระบบงาน</h2>
+    <p>หน้าจอที่เจ้าหน้าที่ใช้ทำงานจริง ${opCount} หน้า จัดวางอย่างระบบที่ใช้งานได้จริง
+      ไม่มีคำอธิบายการออกแบบปะปนอยู่ในหน้าจอ</p>
+    <ul>
+      <li>แผนที่ ทะเบียนชั้นข้อมูล ตารางข้อมูล และวิเคราะห์แนวเขต</li>
+      <li>บันทึกข้อมูล นำเข้าไฟล์ สำรวจภาคสนาม ตรวจสอบและอนุมัติ</li>
+      <li>ส่งออก เผยแพร่ ตัวชี้วัด สิทธิ์ และบันทึกการใช้งาน</li>
+    </ul>
+    <span class="cta">เข้าใช้งานระบบ →</span>
+  </a>
+  <a class="docs" href="system-detail.html">
+    <span class="ic">${icon('book')}</span>
+    <h2>รายละเอียดระบบงาน</h2>
+    <p>สถาปัตยกรรมระบบ กฎการทำงานรายหน้าจอ ความสอดคล้องกับข้อกำหนดขอบเขตของงาน
+      และเอกสารการออกแบบฉบับเต็ม</p>
+    <ul>
+      <li>สถาปัตยกรรมระบบและกลุ่มผู้ใช้งาน</li>
+      <li>ข้อกำหนด Use Case 57 รายการใน 13 กลุ่มงาน</li>
+      <li>การออกแบบฐานข้อมูล พจนานุกรมข้อมูล และข้อกำหนด API</li>
+    </ul>
+    <span class="cta">เปิดเอกสาร →</span>
+  </a>`;
 
-document.getElementById('scopeNote').innerHTML = `${icon('warn')}<div>
-  <strong>ขอบเขตที่ต้องตกลงให้ชัดเจนก่อนเริ่มงาน</strong>
-  ข้อกำหนดขอบเขตของงานฉบับที่ใช้เป็นต้นแบบระบุว่า การส่งมอบครอบคลุม <em>ฐานข้อมูลและไฟล์ส่งมอบ</em>
-  โดย <em>ไม่รวม</em> การพัฒนาระบบ Web GIS และการจัดซื้อเครื่องแม่ข่าย เว้นแต่ระบุเพิ่มก่อนประกาศจ้าง
-  ต้นแบบหน้าจอชุดนี้จึงมีสถานะเป็น <strong>ข้อเสนอส่วนขยาย</strong> เพื่อประกอบการพิจารณาว่าจะเพิ่มขอบเขตหรือไม่
-  หากไม่เพิ่ม ข้อกำหนดเดิมยังรองรับได้ด้วยการส่งมอบ GeoPackage และโครงการ QGIS ตามหน้า
-  <a href="export.html">ส่งออกและเผยแพร่</a></div>`;
+document.getElementById('howto').innerHTML = `${icon('info')}<div>
+  <strong>วิธีดูต้นแบบ</strong>
+  ในส่วนระบบงาน กดปุ่มมุมขวาบนเพื่อสลับกลุ่มสิทธิ์และดูว่าหน้าจอเปลี่ยนไปอย่างไร
+  และกดปุ่ม <b>รายละเอียดระบบ</b> บนแถบบน เพื่อเปิดคำอธิบายของหน้าจอที่กำลังดูอยู่ในแท็บใหม่
+  จะเริ่มจาก <a href="login.html">หน้าเข้าสู่ระบบ</a> ก็ได้</div>`;
 </script>
 </body>
 </html>

@@ -34,7 +34,7 @@ const ACT = {
 
 root.innerHTML = `
 ${pageHead({
-  crumbs: ['<a href="index.html">หน้าแรก</a>', 'บันทึกการใช้งาน'],
+  crumbs: ['<a href="dashboard.html">หน้าแรก</a>', 'บันทึกการใช้งาน'],
   title: 'บันทึกการใช้งาน (Audit Log)',
   sub: 'บันทึกว่าใครทำอะไร เมื่อไร กับข้อมูลใด พร้อมค่าก่อน/หลัง ใช้ประกอบการตรวจสอบภายในและการสอบทานข้อมูล',
   actions: `<button class="btn" id="btnFilter">${icon('filter')} ตัวกรองขั้นสูง</button>
@@ -80,8 +80,7 @@ ${pageHead({
         <tbody id="aRows"></tbody>
       </table>
     </div>
-    <div class="card-foot">บันทึกสร้างอัตโนมัติด้วย trigger ระดับฐานข้อมูล จึงครอบคลุมการแก้ไขที่เข้ามาจากทุกช่องทาง
-      รวมถึงการแก้ไขผ่าน QGIS ที่เชื่อมต่อฐานข้อมูลโดยตรง</div>
+    <div class="card-foot">บันทึกครอบคลุมการแก้ไขที่เข้ามาจากทุกช่องทาง รวมถึงโปรแกรมภายนอกที่เชื่อมต่อฐานข้อมูล</div>
   </div>
 
   <div class="stack">

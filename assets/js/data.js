@@ -677,7 +677,6 @@ function icon(name, cls) {
 /* ---------- โครงสร้างเมนู ---------- */
 const NAV = [
   { label: 'ภาพรวม', items: [
-    { href: 'index.html',           icon: 'home',   text: 'หน้าแรกของระบบ' },
     { href: 'dashboard.html',       icon: 'gauge',  text: 'แดชบอร์ดผู้บริหาร' }
   ]},
   { label: 'การใช้งานข้อมูล', items: [
@@ -699,20 +698,34 @@ const NAV = [
     { href: 'monitoring.html',      icon: 'chart',    text: 'ตัวชี้วัดและการติดตาม' },
     { href: 'users.html',           icon: 'users',    text: 'ผู้ใช้งานและสิทธิ์' },
     { href: 'audit-log.html',       icon: 'history',  text: 'บันทึกการใช้งาน' }
-  ]},
-  { label: 'เอกสารออกแบบระบบ', items: [
-    { href: 'usecase-spec.html',    icon: 'check',   text: 'ข้อกำหนด Use Case', tag: '57' },
-    { href: 'db-design.html',       icon: 'db',      text: 'การออกแบบฐานข้อมูล' },
-    { href: 'data-dictionary.html', icon: 'book',    text: 'พจนานุกรมข้อมูล' },
-    { href: 'api-list.html',        icon: 'plug',    text: 'รายการ API' },
-    { href: 'api-spec.html',        icon: 'code',    text: 'ข้อกำหนด API (Spec)' },
-    { href: 'design-system.html',   icon: 'palette', text: 'ระบบการออกแบบ' }
   ]}
 ];
 
 /* ---------- สิทธิ์การเข้าถึงรายหน้า ----------
    หน้าที่ไม่ได้ระบุไว้ = ทุกกลุ่มเข้าได้
    กลุ่มที่ไม่อยู่ในรายการจะเห็นเมนูเป็นสีจางและกดไม่ได้           */
+/* ---------- เมนูของส่วนเอกสารรายละเอียดระบบ ---------- */
+const DOC_NAV = [
+  { label: 'รายละเอียดระบบงาน', items: [
+    { href: 'system-detail.html',   icon: 'book',    text: 'ภาพรวมและรายหน้าจอ' },
+    { href: 'usecase-spec.html',    icon: 'check',   text: 'ข้อกำหนด Use Case', tag: '57' }
+  ]},
+  { label: 'เอกสารออกแบบระบบ', items: [
+    { href: 'db-design.html',       icon: 'db',      text: 'การออกแบบฐานข้อมูล' },
+    { href: 'data-dictionary.html', icon: 'book',    text: 'พจนานุกรมข้อมูล' },
+    { href: 'api-list.html',        icon: 'plug',    text: 'รายการ API' },
+    { href: 'api-spec.html',        icon: 'code',    text: 'ข้อกำหนด API (Spec)' },
+    { href: 'design-system.html',   icon: 'palette', text: 'ระบบการออกแบบ' }
+  ]},
+  { label: 'กลับสู่ระบบงาน', items: [
+    { href: 'dashboard.html',       icon: 'gauge',   text: 'หน้าจอใช้งานระบบ' }
+  ]}
+];
+
+/* หน้าที่อยู่ในส่วนเอกสาร ใช้เมนู DOC_NAV และไม่คิดสิทธิ์รายกลุ่มผู้ใช้ */
+const DOC_PAGES = DOC_NAV.flatMap(g => g.items.map(i => i.href))
+  .filter(h => h !== 'dashboard.html');
+
 const PAGE_ACCESS = {
   'data-entry.html':    ['editor', 'both', 'admin'],
   'import.html':        ['editor', 'both', 'admin'],

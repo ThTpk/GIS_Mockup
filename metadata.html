@@ -21,10 +21,10 @@ const root = document.getElementById('root');
 
 root.innerHTML = `
 ${pageHead({
-  crumbs: ['<a href="index.html">หน้าแรก</a>', '<a href="layers.html">ทะเบียนชั้นข้อมูล</a>', 'Metadata'],
+  crumbs: ['<a href="dashboard.html">หน้าแรก</a>', '<a href="layers.html">ทะเบียนชั้นข้อมูล</a>', 'Metadata'],
   title: 'Metadata ชุดข้อมูล',
   badge: badge('ISO 19115 / มาตรฐานข้อมูลภาครัฐ', 'info'),
-  sub: 'คำอธิบายชุดข้อมูล สายข้อมูล ความแม่นยำ เงื่อนไขการใช้ และรอบการปรับปรุง — ส่งมอบคู่กับฐานข้อมูลทุกครั้ง',
+  sub: 'คำอธิบายชุดข้อมูล สายข้อมูล ความแม่นยำ เงื่อนไขการใช้ และรอบการปรับปรุง',
   actions: `<select id="mLayer" style="width:auto;min-height:34px"></select>
             <button class="btn" id="btnXml">${icon('code')} ส่งออก XML</button>
             <button class="btn btn-primary" data-need="write-all" id="btnEdit">${icon('pencil')} แก้ไข Metadata</button>`
@@ -38,8 +38,7 @@ ${pageHead({
       <div class="table-wrap">
         <table class="tbl"><tbody id="mRows"></tbody></table>
       </div>
-      <div class="card-foot">Metadata จัดเก็บในตาราง <code>app.metadata_record</code>
-        และส่งออกเป็น ISO 19115 XML ได้โดยตรง ไม่ต้องจัดทำซ้ำด้วยมือ</div>
+      <div class="card-foot">ส่งออกเป็น ISO 19115 XML ได้โดยตรง ไม่ต้องจัดทำซ้ำด้วยมือ</div>
     </div>
 
     <div class="card">

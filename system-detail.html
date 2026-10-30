@@ -1,0 +1,581 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>รายละเอียดระบบงาน — GeoCore GIS</title>
+<meta name="description" content="รายละเอียดระบบงาน สถาปัตยกรรม กฎการทำงานรายหน้าจอ และเอกสารการออกแบบระบบสารสนเทศภูมิศาสตร์">
+<link rel="icon" href="assets/img/favicon.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/app.css">
+<style>
+  .jump { position: sticky; top: calc(var(--topbar-h) + 10px); align-self: start;
+    max-height: calc(100vh - var(--topbar-h) - 32px); overflow: auto; }
+  .jump a { display: block; padding: 5px 9px; border-radius: var(--r-sm); font-size: .8rem; color: var(--ink-2); }
+  .jump a:hover { background: var(--surface-2); color: var(--ink-1); text-decoration: none; }
+  .anchor { scroll-margin-top: calc(var(--topbar-h) + 16px); }
+  .sc-sum { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; width: 100%; }
+  .sc-sum .scn { font-weight: 600; font-size: .88rem; }
+  .sc-sum svg { width: 15px; height: 15px; flex: 0 0 15px; color: var(--ink-3); }
+  .sc-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr)); gap: 13px; }
+  .sc-block { border: 1px solid var(--line); border-radius: var(--r-md); padding: 11px 13px; background: var(--surface-1); }
+  .sc-block h4 { font-size: .72rem; font-weight: 700; letter-spacing: .03em; text-transform: uppercase;
+    color: var(--ink-3); margin: 0 0 7px; }
+  .sc-block ul { margin: 0; padding-left: 18px; font-size: .83rem; line-height: 1.6; color: var(--ink-1); }
+  .sc-block li { margin-bottom: 3px; }
+  .sc-block.wide { grid-column: 1 / -1; }
+  .doccards { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 13px; }
+  .doccard { display: block; border: 1px solid var(--line); border-radius: var(--r-lg); padding: 15px 16px;
+    background: var(--surface-1); color: var(--ink-1); box-shadow: var(--shadow-sm); }
+  .doccard:hover { border-color: var(--line-strong); text-decoration: none; box-shadow: var(--shadow-md); }
+  .doccard .ic { color: var(--s1); display: block; margin-bottom: 8px; }
+  .doccard .ic svg { width: 20px; height: 20px; }
+  .doccard h3 { font-size: .92rem; margin: 0 0 4px; }
+  .doccard p { font-size: .79rem; color: var(--ink-3); margin: 0; line-height: 1.55; }
+  @media print { .jump { display: none } details.acc > div { display: block !important } }
+</style>
+</head>
+<body>
+<main class="content"><div class="content-inner" id="root"></div></main>
+
+<script src="assets/js/data.js"></script>
+<script src="assets/js/shell.js"></script>
+<script>
+renderShell('system-detail.html');
+const root = document.getElementById('root');
+
+/* ============================================================
+   รายละเอียดรายหน้าจอ
+   คำอธิบายการออกแบบทั้งหมดย้ายมารวมไว้ที่นี่ หน้าจอใช้งานจึงเหลือเฉพาะส่วนทำงาน
+   ro = กลุ่มสิทธิ์ที่เข้าถึงได้ · rule = กฎการทำงาน · data = ตารางและฟิลด์ · api · uc · std
+   ============================================================ */
+const SCREEN_DOCS = [
+{ id:'dashboard.html', icon:'gauge', name:'แดชบอร์ดผู้บริหาร', grp:'ภาพรวม',
+  ro:['viewer','editor','both','admin'],
+  purpose:'สรุปสถานะฐานข้อมูลเชิงพื้นที่ในหน้าเดียว ความคืบหน้ารายชั้นข้อมูล งานค้างในคิวตรวจสอบ และข้อค้นพบคุณภาพที่ต้องจัดการ',
+  rule:['กลุ่มผู้ป้อนข้อมูลเห็นเฉพาะความคืบหน้าของงานที่ตนรับผิดชอบ ไม่เห็นภาพรวมทั้งฐานข้อมูล',
+        'ทุกกราฟมีมุมมองตารางข้อมูลกำกับ เพื่อให้อ่านด้วยโปรแกรมอ่านหน้าจอได้',
+        'เมื่อข้อมูลยังไม่ถึงเกณฑ์ที่สรุปได้ ระบบแจ้งว่าข้อมูลไม่พอ ไม่แสดงกราฟที่ชวนเข้าใจผิด'],
+  data:['คำนวณจาก view สรุปในฐานข้อมูล ไม่ดึงรายการทั้งหมดมานับฝั่งผู้ใช้'],
+  api:['GET /api/v1/analytics/summary'], uc:['UC-48','UC-38'],
+  std:['WCAG 2.2 ระดับ AA — ทุกกราฟมีทางเลือกเป็นตาราง'] },
+
+{ id:'map.html', icon:'map', name:'แผนที่และชั้นข้อมูล', grp:'การใช้งานข้อมูล',
+  ro:['viewer','editor','both','admin'],
+  purpose:'เปิดปิดชั้นข้อมูล ค้นหารายการ วัดระยะและพื้นที่ ดูรายละเอียดเชิงคุณลักษณะของแต่ละรายการ และพิมพ์แผนที่',
+  rule:['ชั้นข้อมูลแสดงด้วย Vector Tile ไม่ดึงข้อมูลทั้งชั้นมาประมวลผลฝั่งผู้ใช้',
+        'การคำนวณระยะและพื้นที่ทำบน EPSG:32647 (UTM Zone 47N) ไม่คำนวณบนพิกัดภูมิศาสตร์',
+        'ฟิลด์อ่อนไหวถูกปิดบังที่ฝั่งแม่ข่าย ไม่ส่งค่าจริงมาแล้วซ่อนที่หน้าจอ',
+        'ชั้นข้อมูลที่กลุ่มสิทธิ์นั้นไม่มีสิทธิ์อ่าน จะไม่ปรากฏในบานควบคุมชั้นข้อมูล'],
+  data:['จัดเก็บรูปทรงบน EPSG:4326 ทุกชั้นข้อมูล','แผนที่ฐานเป็นบริการภายนอก ไม่ส่งพิกัดของข้อมูลอ่อนไหวไปกับคำขอ'],
+  api:['GET /api/v1/tiles/{layerCode}/{z}/{x}/{y}.pbf','GET /api/v1/tiles/basemaps','POST /api/v1/spatial/measure'],
+  uc:['UC-10','UC-11','UC-12','UC-13','UC-14','UC-20'],
+  std:['OGC WMS 1.3.0 · WFS 2.0.0 · OGC API — Features 1.0'] },
+
+{ id:'layers.html', icon:'layers', name:'ทะเบียนชั้นข้อมูล', grp:'การใช้งานข้อมูล',
+  ro:['viewer','editor','both','admin'],
+  purpose:'ทะเบียนชั้นข้อมูล 10 ชั้น พร้อมประเภทรูปทรง แหล่งที่มา ความครบถ้วน และสถานะการอนุมัติรายชั้น',
+  rule:['ชั้นข้อมูลใหม่ 8 ชั้นจากการสำรวจ และชั้นข้อมูลเดิมที่เชื่อมโยง 2 ชั้น ต้องแยกแสดงที่มาให้เห็นชัด',
+        'ชั้นข้อมูลที่กลุ่มสิทธิ์นั้นไม่มีสิทธิ์อ่าน แสดงแบบปิดการใช้งานพร้อมเหตุผล'],
+  data:['ชั้นข้อมูลทุกชั้นใช้ชุดฟิลด์มาตรฐานเดียวกัน 21 ฟิลด์ ครอบคลุมรหัสรายการไม่ซ้ำ แหล่งข้อมูล วันที่สำรวจ หน่วยงานรับผิดชอบหรือสถานะรอยืนยัน และคำอธิบายข้อมูล',
+        'เมื่อสร้างชั้นข้อมูลใหม่ ระบบสร้างตารางพร้อมชุดฟิลด์มาตรฐาน ดัชนี GiST และ trigger บันทึกประวัติให้อัตโนมัติด้วย gis.add_core_columns()'],
+  api:['GET /api/v1/layers','GET /api/v1/layers/{layerCode}'], uc:['UC-06','UC-07'],
+  std:['ISO 19115-1:2014 สำหรับคำอธิบายชุดข้อมูลรายชั้น'] },
+
+{ id:'attribute-table.html', icon:'table', name:'ตารางข้อมูล', grp:'การใช้งานข้อมูล',
+  ro:['viewer','editor','both','admin'],
+  purpose:'ค้นหา กรอง เรียง และแก้ไขค่าในตารางโดยตรง พร้อมส่งออกเฉพาะรายการที่กรองไว้',
+  rule:['การกรองและเรียงลำดับทำที่ฐานข้อมูล ไม่ดึงข้อมูลทั้งชั้นมาเรียงฝั่งผู้ใช้',
+        'กลุ่มผู้ป้อนข้อมูลเห็นเฉพาะรายการที่ตนบันทึกและชั้นข้อมูลที่ได้รับมอบหมาย',
+        'แก้ไขในตารางได้เฉพาะรายการสถานะร่างหรือตีกลับ รายการที่อนุมัติแล้วต้องยื่นแก้ผ่านหน้าบันทึกข้อมูล',
+        'ฟิลด์รหัสรายการแก้ไขไม่ได้หลังสร้างแล้ว'],
+  data:['ทุกการแก้ไขบันทึกค่าก่อนและหลังลงบันทึกการใช้งาน','ตัวกรองที่ตั้งไว้ส่งต่อไปใช้ที่หน้าส่งออกได้'],
+  api:['GET /api/v1/layers/{layerCode}/features','PATCH /api/v1/layers/{layerCode}/features/{id}'],
+  uc:['UC-15','UC-16'], std:[] },
+
+{ id:'boundary.html', icon:'target', name:'วิเคราะห์แนวเขต', grp:'การใช้งานข้อมูล',
+  ro:['viewer','both','admin'],
+  purpose:'เปรียบเทียบแนวเขตตามเอกสารอ้างอิงกับแนวเขตจัดเก็บที่ใช้งานจริง จัดทำบัญชีพื้นที่คลาดเคลื่อน พร้อมหลักฐานและข้อเสนอแนวทางดำเนินการ',
+  rule:['การคำนวณทั้งหมดทำในฐานข้อมูลด้วยฟังก์ชัน PostGIS ไม่ดึงข้อมูลทั้งชั้นมาคำนวณฝั่งผู้ใช้',
+        'รูปทรงที่ไม่ถูกต้องทางเรขาคณิตถูกแก้ด้วย ST_MakeValid() ก่อนคำนวณ และแจ้งผู้ใช้ว่ามีการแก้',
+        'พื้นที่คลาดเคลื่อนเล็กกว่าเกณฑ์ขั้นต่ำถือเป็นความคลาดเคลื่อนจากการดิจิไทซ์ ไม่นับเป็นข้อพิพาท เกณฑ์นี้ต้องตกลงกับหน่วยงานก่อนใช้งานจริง'],
+  data:['คำนวณพื้นที่ด้วย ST_Area(ST_SymDifference(ref.geom, actual.geom)::geography)',
+        'นับจำนวนแปลงที่ดินและสิ่งปลูกสร้างด้วย ST_Intersects กับชั้นข้อมูลเดิม L09 และ L10'],
+  api:['POST /api/v1/spatial/boundary-compare','GET /api/v1/spatial/discrepancies','GET /api/v1/spatial/boundary-report'],
+  uc:['UC-39','UC-40','UC-41','UC-42'], std:[] },
+
+{ id:'data-entry.html', icon:'pencil', name:'บันทึกและแก้ไขข้อมูล', grp:'การบันทึกข้อมูล',
+  ro:['editor','both','admin'],
+  purpose:'ฟอร์มบันทึกและแก้ไขรายการ ใช้ชุดฟิลด์มาตรฐานเดียวกันทุกชั้นข้อมูล ตรวจค่าก่อนบันทึก และกำหนดตำแหน่งหรือวาดรูปทรงบนแผนที่',
+  rule:['รหัสรายการต้องไม่ซ้ำทั้งระบบ บังคับด้วยข้อจำกัด UNIQUE ที่ฐานข้อมูล ระบบออกรหัสให้อัตโนมัติ',
+        'รายการใหม่เริ่มที่สถานะร่างเสมอ ไม่เข้าชุดข้อมูลหลักหรือชุดเผยแพร่จนผ่านการอนุมัติ',
+        'ระบบไม่ลบข้อมูลถาวร ใช้การยกเลิกใช้งานพร้อมเหตุผล เพื่อคงร่องรอยการตรวจสอบ',
+        'พบรายการใกล้เคียงในรัศมี 5 เมตร ระบบเสนอให้แก้รายการเดิมแทนการสร้างซ้ำ',
+        'รายการที่ส่งตรวจแล้วถูกล็อกไม่ให้แก้ไขระหว่างรอการตรวจสอบ'],
+  data:['ตรวจค่าด้วยกฎชุดเดียวกับหน้าตรวจคุณภาพข้อมูล โดยเรียกแบบ dry-run ผ่าน POST /features/validate',
+        'ไฟล์แนบรองรับ JPEG, PNG และ PDF ขนาดไม่เกิน 20 เมกะไบต์ต่อไฟล์'],
+  api:['POST /api/v1/layers/{layerCode}/features','PUT /api/v1/layers/{layerCode}/features/{id}','POST /api/v1/survey/attachments'],
+  uc:['UC-17','UC-18','UC-19','UC-20','UC-34'],
+  std:['พ.ร.บ.คุ้มครองข้อมูลส่วนบุคคล พ.ศ. 2562 — ภาพที่มีใบหน้าหรือป้ายทะเบียนต้องปิดบังก่อนเผยแพร่'] },
+
+{ id:'import.html', icon:'upload', name:'นำเข้าข้อมูลจากไฟล์', grp:'การบันทึกข้อมูล',
+  ro:['editor','both','admin'],
+  purpose:'นำเข้าข้อมูลจุด เส้น และรูปปิด จากไฟล์ภายนอกเข้าสู่ชั้นข้อมูลในระบบ ผ่าน 4 ขั้นตอน คือเลือกไฟล์ ตรวจไฟล์และระบบพิกัด จับคู่ฟิลด์ แล้วตรวจสอบและยืนยัน',
+  rule:['ระบบแปลงพิกัดเป็น EPSG:4326 ก่อนบันทึกเสมอด้วย ST_Transform เพื่อให้ทุกชั้นข้อมูลอยู่ในระบบพิกัดเดียวกัน หากเลือกระบบพิกัดผิด ข้อมูลจะไปตกนอกพื้นที่และถูกกฎ QC-04 ตรวจจับ',
+        'ค่ารหัสในไฟล์ต้นทางต้องตรงกับตารางค่าอ้างอิงของระบบตามกฎ QC-09 ค่าที่จับคู่ไม่ได้จะให้ผู้ใช้เลือกด้วยตนเอง',
+        'การนำเข้าสำเร็จทั้งชุดหรือไม่สำเร็จเลย บันทึกใน transaction เดียว ไม่ยอมให้เหลือข้อมูลค้างครึ่งทาง',
+        'แปลงรูปทรงให้ตรงชนิดของชั้นข้อมูลปลายทางด้วย ST_Multi() หรือ ST_Dump() และแก้รูปทรงที่ไม่ถูกต้องด้วย ST_MakeValid()',
+        'ข้อมูลที่นำเข้ามีสถานะร่าง ไม่เข้าชุดข้อมูลหลักหรือชุดเผยแพร่จนผ่านการอนุมัติ',
+        'Shapefile จำกัดชื่อฟิลด์ไว้ 10 อักขระ ชื่อต้นทางจึงเป็นตัวย่อ ต้องตรวจการจับคู่ด้วยตาอีกครั้ง'],
+  data:['ทุกครั้งที่นำเข้า ระบบบันทึกไฟล์ต้นฉบับ ค่าแฮช การจับคู่ฟิลด์ และผลการตรวจไว้ใน app.import_job จึงตรวจสอบย้อนหลังได้ว่าข้อมูลแต่ละรายการมาจากไฟล์ใด เก็บไฟล์ต้นฉบับไว้ 90 วัน',
+        'รองรับการเข้ารหัส TIS-620 สำหรับไฟล์ .dbf ภาษาไทย และอ่านระบบพิกัดจาก .prj, CRS member หรือ gpkg_spatial_ref_sys'],
+  api:['POST /api/v1/imports','POST /api/v1/imports/{id}/inspect','PUT /api/v1/imports/{id}/mapping',
+       'POST /api/v1/imports/{id}/validate','POST /api/v1/imports/{id}/commit','POST /api/v1/imports/{id}/rollback'],
+  uc:['UC-25','UC-26','UC-27','UC-28','UC-29'],
+  std:['OGC GeoPackage 1.3 · GeoJSON (RFC 7946)'] },
+
+{ id:'mobile-survey.html', icon:'mobile', name:'สำรวจภาคสนาม (มือถือ)', grp:'การบันทึกข้อมูล',
+  ro:['editor','both','admin'],
+  purpose:'หน้าจอสำหรับงานสำรวจภาคสนามบนอุปกรณ์เคลื่อนที่ ทำงานออฟไลน์ได้ และซิงก์ขึ้นระบบเมื่อมีสัญญาณ',
+  rule:['ทุกรายการเก็บค่าความแม่นยำที่วัดได้ในฟิลด์ positional_accuracy_m',
+        'ตำแหน่งที่ปักด้วยมือต้องระบุไว้ให้แยกออกจากตำแหน่งที่วัดด้วยเครื่องรับสัญญาณดาวเทียม',
+        'การซิงก์ต้องไม่สร้างรายการซ้ำเมื่อส่งคำขอเดิมหลายครั้ง และไม่ลบข้อมูลในเครื่องจนกว่าแม่ข่ายยืนยันว่าบันทึกสำเร็จ',
+        'ขอบเขตพื้นที่ที่ดาวน์โหลดไปใช้ออฟไลน์ได้ครั้งละไม่เกิน 25 ตารางกิโลเมตร'],
+  data:['ภาพถ่ายเก็บพร้อมพิกัด ทิศทางกล้อง และเวลา แล้วบีบอัดให้เหมาะกับเครือข่ายมือถือ',
+        'ภาพในชั้นข้อมูล L03 กล้องโทรทัศน์วงจรปิด เป็นข้อมูลอ่อนไหว ห้ามเข้าชุดเผยแพร่'],
+  api:['GET /api/v1/survey/assignments','POST /api/v1/survey/records','POST /api/v1/survey/sync','POST /api/v1/survey/attachments'],
+  uc:['UC-21','UC-22','UC-23','UC-24'], std:[] },
+
+{ id:'review.html', icon:'check', name:'คิวตรวจสอบและอนุมัติ', grp:'การบันทึกข้อมูล',
+  ro:['both','admin'],
+  purpose:'คิวตรวจสอบรายการที่ส่งเข้ามา เปรียบเทียบค่าก่อนและหลัง ตรวจหลักฐานอ้างอิง แล้วอนุมัติหรือตีกลับพร้อมเหตุผล',
+  rule:['การตรวจสอบต้องแยกจากผู้บันทึกข้อมูล ผู้บันทึกอนุมัติรายการของตนเองไม่ได้',
+        'การตีกลับต้องระบุความเห็นและฟิลด์ที่ต้องแก้ เพื่อให้ผู้บันทึกแก้ได้ตรงจุด',
+        'การอนุมัติแบบกลุ่มใช้ได้เฉพาะรายการที่ไม่มีข้อค้นพบคุณภาพระดับวิกฤต',
+        'รายการที่เกินกำหนด SLA ถูกเน้นในคิวและนับรวมในตัวชี้วัดงานค้าง'],
+  data:['บันทึกผู้ตรวจ เวลา และความเห็นลงบันทึกการใช้งานทุกครั้ง'],
+  api:['GET /api/v1/workflow/queue','GET /api/v1/workflow/items/{id}/diff',
+       'POST /api/v1/workflow/items/{id}/approve','POST /api/v1/workflow/batch-approve'],
+  uc:['UC-35','UC-36','UC-37','UC-38'],
+  std:['COBIT 2019 — การแบ่งแยกหน้าที่เพื่อการควบคุมภายใน'] },
+
+{ id:'qc.html', icon:'shield', name:'ตรวจคุณภาพข้อมูล', grp:'การบันทึกข้อมูล',
+  ro:['viewer','editor','both','admin'],
+  purpose:'ตรวจความครบถ้วนของฟิลด์บังคับ ความซ้ำซ้อน พิกัด ค่าในโดเมน และความสัมพันธ์เชิงพื้นที่ ด้วยกฎ 12 กฎใน 6 หมวด',
+  rule:['ข้อค้นพบระดับวิกฤตต้องแก้ไขให้ครบก่อนส่งมอบงวด ระดับสำคัญและเตือนต้องมีคำชี้แจงหากไม่แก้ไข',
+        'ข้อค้นพบระดับวิกฤตที่ยังค้าง ทำให้รายการนั้นผ่านการอนุมัติไม่ได้',
+        'การยกเว้นข้อค้นพบต้องมีเหตุผลและหลักฐาน ไม่ยกเว้นแบบเหมารวมทั้งชั้นข้อมูล และข้อค้นพบระดับวิกฤตต้องมีผู้อนุมัติที่ไม่ใช่ผู้ยื่นขอ',
+        'ข้อกำหนดขอบเขตของงานกำหนดให้จัดบัญชีรายการที่เข้าไม่ถึงพร้อมเหตุผลและข้อมูลทดแทน ระบบบันทึกแยกต่างหาก ไม่ปะปนกับข้อมูลที่สำรวจได้จริง'],
+  data:['ระบบตรวจอัตโนมัติทุกวันเวลา 02:00 และเรียกตรวจเพิ่มได้ตามต้องการ เก็บผลย้อนหลัง 24 เดือน'],
+  api:['GET /api/v1/qc/rules','POST /api/v1/qc/runs','GET /api/v1/qc/findings','GET /api/v1/qc/report'],
+  uc:['UC-30','UC-31','UC-32','UC-33'],
+  std:['ISO 19157:2013 — คุณภาพข้อมูลภูมิสารสนเทศ'] },
+
+{ id:'export.html', icon:'download', name:'ส่งออกและเผยแพร่', grp:'ส่งมอบและกำกับดูแล',
+  ro:['viewer','both','admin'],
+  purpose:'จัดชุดส่งมอบตามรูปแบบที่กำหนด พร้อมบัญชีไฟล์ รุ่นข้อมูล และชุดเผยแพร่ที่ตัดข้อมูลอ่อนไหวออก',
+  rule:['ฐานข้อมูลใช้งานภายในและชุดเผยแพร่ต้องแยกกัน ชุดเผยแพร่ตัดชั้นข้อมูล L03 และฟิลด์อ่อนไหวออกอัตโนมัติ',
+        'ฟิลด์ที่ยังไม่จัดระดับชั้นความลับถือเป็นข้อมูลภายในโดยปริยาย',
+        'กลุ่มผู้อ่านข้อมูลส่งออกได้เฉพาะแผนที่ PDF และตาราง CSV ตามที่กรองไว้',
+        'งานส่งออกเก็บเงื่อนไขที่ใช้ไว้ทั้งหมด จึงสร้างชุดเดิมซ้ำได้',
+        'ลิงก์ดาวน์โหลดหมดอายุภายใน 24 ชั่วโมง และบันทึกการดาวน์โหลดทุกครั้งลงบันทึกการใช้งาน'],
+  data:['บัญชีไฟล์ระบุขนาด จำนวนรายการ รุ่นข้อมูล และค่าแฮชของทุกไฟล์ เพื่อให้ผู้ว่าจ้างตรวจรับได้ว่าไฟล์ครบถ้วนและไม่ถูกแก้ไขระหว่างส่งมอบ',
+        'โครงการ QGIS ใช้พาธสัมพัทธ์ เพื่อให้ย้ายเครื่องแล้วยังเปิดได้',
+        'เก็บไฟล์ชุดส่งมอบย้อนหลัง 12 รุ่น และเก็บบัญชีไฟล์กับเงื่อนไขไว้ถาวร'],
+  api:['POST /api/v1/exports','GET /api/v1/exports','GET /api/v1/exports/profiles','POST /api/v1/exports/services'],
+  uc:['UC-43','UC-44','UC-45','UC-46','UC-47'],
+  std:['OGC GeoPackage 1.3 · WMS 1.3.0 · WFS 2.0.0 · OGC API — Features 1.0'] },
+
+{ id:'metadata.html', icon:'tag', name:'Metadata ชุดข้อมูล', grp:'ส่งมอบและกำกับดูแล',
+  ro:['viewer','editor','both','admin'],
+  purpose:'คำอธิบายชุดข้อมูล สายข้อมูล ความแม่นยำ เงื่อนไขการใช้ และรอบการปรับปรุง ส่งมอบคู่กับฐานข้อมูลทุกครั้ง',
+  rule:['รายการ Metadata บังคับต้องครบก่อนเผยแพร่ชุดข้อมูล ระบบไม่ให้บันทึกหากยังขาด',
+        'ไฟล์ส่งออกต้องผ่านการตรวจกับ schema ของ ISO 19139 ทุกครั้ง'],
+  data:['จัดเก็บในตาราง app.metadata_record และส่งออกเป็น ISO 19115 XML ได้โดยตรง ไม่ต้องจัดทำซ้ำด้วยมือ'],
+  api:['GET /api/v1/layers/{layerCode}/metadata','PUT /api/v1/layers/{layerCode}/metadata',
+       'GET /api/v1/layers/{layerCode}/metadata/iso19139'],
+  uc:['UC-08','UC-09'],
+  std:['ISO 19115-1:2014 · ISO 19139'] },
+
+{ id:'monitoring.html', icon:'chart', name:'ตัวชี้วัดและการติดตาม', grp:'ส่งมอบและกำกับดูแล',
+  ro:['viewer','both','admin'],
+  purpose:'ตัวชี้วัดคุณภาพข้อมูลและการให้บริการ รอบการทบทวน ผู้รับผิดชอบปรับปรุงข้อมูล และแนวทางสำรองกับส่งต่อฐานข้อมูล',
+  rule:['ตัวชี้วัดทุกตัวต้องมีเจ้าภาพ เป้าหมาย และรอบการวัดที่ระบุชัด',
+        'ตัวชี้วัดที่ต่ำกว่าเป้าหมายต่อเนื่องสองรอบ ระบบแจ้งผู้รับผิดชอบและผู้บริหารที่กำกับ',
+        'ชั้นข้อมูลที่เกินกำหนดทบทวนเกิน 90 วัน ถือเป็นข้อค้นพบด้านการกำกับดูแล',
+        'ข้อกำหนดขอบเขตของงานกำหนดให้เสนอแนวทางสำรองและส่งต่อฐานข้อมูล เพื่อให้หน่วยงานใช้งานต่อได้เองหลังสิ้นสุดสัญญา',
+        'การอบรมเจ้าหน้าที่ส่งมอบคู่มือ แบบฝึกหัด รายชื่อผู้เข้าร่วม ภาพถ่าย และผลประเมินการเรียนรู้ ตามข้อกำหนดขั้นต่ำ 2 ครั้ง ครั้งละไม่น้อยกว่า 15 คน'],
+  data:['ค่าตัวชี้วัดคำนวณจากฐานข้อมูลโดยตรง ไม่ต้องกรอกด้วยมือ ยกเว้นตัวชี้วัดด้านการอบรมที่บันทึกจากรายชื่อผู้เข้าร่วม',
+        'สำรองข้อมูลรายวันและเก็บย้อนหลัง 30 รุ่น ทดสอบกู้คืนอย่างน้อยไตรมาสละครั้ง'],
+  api:['GET /api/v1/analytics/kpi','GET /api/v1/analytics/review-cycles','GET /api/v1/system/backups','GET /api/v1/analytics/training'],
+  uc:['UC-49','UC-50','UC-51','UC-52'],
+  std:['ISO 22301:2019 — ความต่อเนื่องทางธุรกิจ'] },
+
+{ id:'users.html', icon:'users', name:'ผู้ใช้งานและสิทธิ์', grp:'ส่งมอบและกำกับดูแล',
+  ro:['admin'],
+  purpose:'จัดการบัญชีผู้ใช้ กลุ่มสิทธิ์ และตารางสิทธิ์รายหน้าจอกับรายฟังก์ชัน',
+  rule:['หนึ่งบัญชีมีได้หนึ่งกลุ่มสิทธิ์ เพื่อให้สอบทานความรับผิดชอบได้',
+        'ห้ามลบบัญชีที่มีประวัติการแก้ไขข้อมูล ให้ระงับการใช้งานเท่านั้น',
+        'ผู้บันทึกข้อมูลอนุมัติรายการของตนเองไม่ได้ ระบบไม่ให้บันทึกตารางสิทธิ์ที่ทำให้ไม่มีผู้อนุมัติเหลืออยู่',
+        'ผู้ใช้งานภายนอกกำหนดวันหมดอายุสิทธิ์ได้ ระบบเพิกถอนอัตโนมัติเมื่อถึงกำหนดและลบชุดข้อมูลออฟไลน์ออกจากอุปกรณ์',
+        'ชั้นข้อมูล L03 กล้องโทรทัศน์วงจรปิด เปิดให้เฉพาะกลุ่มที่ระบุรายชื่อ'],
+  data:['การจำกัดสิทธิ์บังคับ 3 ระดับ คือที่เมนู ที่ลิงก์ภายในหน้า และที่ตัวหน้าเองเมื่อเปิด URL ตรง',
+        'ตรวจสิทธิ์สองชั้น คือที่ชั้น API ตามกลุ่มสิทธิ์ และที่ชั้นฐานข้อมูลด้วย Row Level Security ตามขอบเขตชั้นข้อมูลและพื้นที่ของผู้ใช้'],
+  api:['GET /api/v1/users','POST /api/v1/users','PUT /api/v1/users/roles/{role}/permissions'],
+  uc:['UC-03','UC-04','UC-05'],
+  std:['NIST SP 800-63-3 · OWASP ASVS 4.0 หมวดการเข้าถึง'] },
+
+{ id:'audit-log.html', icon:'history', name:'บันทึกการใช้งาน', grp:'ส่งมอบและกำกับดูแล',
+  ro:['both','admin'],
+  purpose:'บันทึกว่าใครทำอะไร เมื่อไร กับข้อมูลใด พร้อมค่าก่อนและหลัง ใช้ประกอบการตรวจสอบภายในและการสอบทานข้อมูล',
+  rule:['บันทึกการใช้งานแก้ไขหรือลบไม่ได้ และเก็บย้อนหลังอย่างน้อย 2 ปี',
+        'ผู้ดูแลระบบลบบันทึกการใช้งานของตนเองไม่ได้',
+        'การส่งออกบันทึกต้องระบุผู้ขอและวัตถุประสงค์ และถูกบันทึกเป็นเหตุการณ์เอง',
+        'การเข้าถึงข้อมูลชั้น L03 บันทึกแยกไว้ใน audit.access_log ต่างหากจากบันทึกการแก้ไขปกติ'],
+  data:['บันทึกสร้างอัตโนมัติด้วย trigger ระดับฐานข้อมูล จึงครอบคลุมการแก้ไขที่เข้ามาจากทุกช่องทาง รวมถึงการแก้ไขผ่าน QGIS ที่เชื่อมต่อฐานข้อมูลโดยตรง'],
+  api:['GET /api/v1/system/audit','GET /api/v1/system/audit/export'],
+  uc:['UC-55','UC-56'],
+  std:['ISO/IEC 27001:2022 — การบันทึกและสอบทานเหตุการณ์'] },
+
+{ id:'login.html', icon:'lock', name:'หน้าเข้าสู่ระบบ', grp:'การเข้าถึง',
+  ro:['viewer','editor','both','admin'],
+  purpose:'ยืนยันตัวตนด้วยบัญชีผู้ใช้ขององค์กร และในต้นแบบนี้ใช้เลือกกลุ่มสิทธิ์เพื่อสาธิตความแตกต่างของแต่ละกลุ่ม',
+  rule:['รหัสผ่านยาวอย่างน้อย 12 อักขระ และขอรหัสยืนยันขั้นที่สองสำหรับกลุ่มผู้ดูแลระบบ',
+        'ข้อความปฏิเสธต้องไม่ช่วยให้คาดเดาบัญชีได้ ผิดเกิน 5 ครั้งใน 15 นาทีล็อกบัญชีชั่วคราว 30 นาที',
+        'ระยะเวลาไม่ใช้งานสูงสุด 30 นาที แล้วออกจากระบบอัตโนมัติ'],
+  data:['access token อายุ 30 นาที และ refresh token อายุ 8 ชั่วโมง','ตรวจสอบกับผู้ให้บริการยืนยันตัวตนของหน่วยงาน (LDAP/AD)'],
+  api:['POST /api/v1/auth/login','POST /api/v1/auth/logout','POST /api/v1/auth/refresh','GET /api/v1/auth/me'],
+  uc:['UC-01','UC-02'],
+  std:['NIST SP 800-63-3 · OWASP ASVS 4.0 หมวด 2'] }
+];
+
+const DESIGN_DOCS = [
+  ['usecase-spec.html','check','ข้อกำหนด Use Case','การทำงาน 57 กรณีใน 13 กลุ่มงาน พร้อมผู้กระทำ ลำดับเหตุการณ์ และกฎการทำงาน'],
+  ['db-design.html','db','การออกแบบฐานข้อมูล','ผังความสัมพันธ์ ตารางทั้งหมด ดัชนี และสคริปต์ SQL สำหรับ PostgreSQL 16 + PostGIS 3.4'],
+  ['data-dictionary.html','book','พจนานุกรมข้อมูล','ชุดฟิลด์มาตรฐาน 21 ฟิลด์ และฟิลด์เฉพาะของทั้ง 10 ชั้นข้อมูล'],
+  ['api-list.html','plug','รายการ API','109 endpoint ใน 14 กลุ่มงาน พร้อมสิทธิ์ที่เรียกใช้ได้'],
+  ['api-spec.html','code','ข้อกำหนด API','รายละเอียดคำขอและคำตอบ รหัสข้อผิดพลาด และตัวอย่าง JSON'],
+  ['design-system.html','palette','ระบบการออกแบบ','สี ตัวอักษร องค์ประกอบหน้าจอ และการรองรับการเข้าถึง']
+];
+
+/* ---------- ตัวช่วยแสดงผล ---------- */
+function rolePills(codes) {
+  return codes.map(c => `<span class="badge badge-outline" title="${ROLES[c].en}">
+    <span style="width:7px;height:7px;border-radius:50%;background:${ROLES[c].color}"></span>${ROLES[c].name}</span>`).join(' ');
+}
+function listBlock(title, items, cls) {
+  if (!items || !items.length) return '';
+  return `<div class="sc-block ${cls || ''}"><h4>${title}</h4>
+    <ul>${items.map(i => `<li>${i}</li>`).join('')}</ul></div>`;
+}
+function monoBlock(title, items) {
+  if (!items || !items.length) return '';
+  return `<div class="sc-block"><h4>${title}</h4>
+    <ul>${items.map(i => `<li><code>${i}</code></li>`).join('')}</ul></div>`;
+}
+function ucBlock(ids) {
+  if (!ids || !ids.length) return '';
+  return `<div class="sc-block"><h4>Use case ที่รองรับ</h4>
+    <div style="display:flex;flex-wrap:wrap;gap:5px">${ids.map(id =>
+      `<a class="badge badge-outline mono" href="usecase-spec.html#${id}" style="text-decoration:none">${id}</a>`).join('')}</div></div>`;
+}
+
+function screenDetail(s) {
+  return `<details class="acc anchor" id="${s.id}">
+    <summary><span class="sc-sum">${icon(s.icon)}
+      <span class="scn">${s.name}</span>
+      <span class="badge badge-outline">${s.grp}</span>
+      <span class="xsmall muted mono">${s.id}</span></span></summary>
+    <div class="acc-body">
+      <p class="small" style="margin:0 0 12px">${s.purpose}</p>
+      <dl class="kv" style="grid-template-columns:126px 1fr;margin-bottom:13px">
+        <dt>เปิดได้โดย</dt><dd>${rolePills(s.ro)}</dd>
+        <dt>หน้าจอใช้งาน</dt><dd><a href="${s.id}">เปิดหน้าจอจริง</a></dd>
+      </dl>
+      <div class="sc-grid">
+        ${listBlock('กฎการทำงาน', s.rule, 'wide')}
+        ${listBlock('ข้อมูลและการจัดเก็บ', s.data)}
+        ${monoBlock('API ที่เกี่ยวข้อง', s.api)}
+        ${ucBlock(s.uc)}
+        ${listBlock('มาตรฐานที่อ้างอิง', s.std)}
+      </div>
+    </div>
+  </details>`;
+}
+
+/* ---------- โครงหน้า ---------- */
+const GROUPS = [...new Set(SCREEN_DOCS.map(s => s.grp))];
+
+root.innerHTML = `
+${pageHead({
+  crumbs: ['<a href="index.html">หน้าแรก</a>', 'รายละเอียดระบบงาน'],
+  title: 'รายละเอียดระบบงาน',
+  badge: badge(`${SCREEN_DOCS.length} หน้าจอ · เอกสารออกแบบ ${DESIGN_DOCS.length} ฉบับ`, 'info'),
+  sub: 'สถาปัตยกรรมระบบ กฎการทำงานรายหน้าจอ ความสอดคล้องกับข้อกำหนดขอบเขตของงาน และทางเข้าสู่เอกสารการออกแบบทั้งหมด',
+  actions: `<a class="btn btn-primary" href="dashboard.html">${icon('gauge')} หน้าจอใช้งานระบบ</a>
+            <button class="btn" id="btnOpen">${icon('plus')} ขยายทั้งหมด</button>
+            <button class="btn" onclick="window.print()">${icon('file')} พิมพ์</button>`
+})}
+
+<div class="notice notice-info mb24">${icon('info')}<div>
+  <strong>เอกสารส่วนนี้แยกออกจากหน้าจอใช้งาน</strong>
+  หน้าจอที่เจ้าหน้าที่ใช้ทำงานจริงแสดงเฉพาะส่วนที่ใช้ปฏิบัติงาน ไม่มีคำอธิบายการออกแบบปะปน
+  คำอธิบายทั้งหมดย้ายมารวมไว้ที่นี่ เปิดได้จากปุ่ม <b>รายละเอียดระบบ</b> ที่แถบบนของทุกหน้าจอ
+  โดยเปิดเป็นแท็บใหม่ ไม่ขัดจังหวะงานที่ทำค้างไว้</div></div>
+
+<div class="grid g-1-2" style="grid-template-columns:210px minmax(0,1fr);gap:20px">
+  <nav class="jump card" aria-label="สารบัญ">
+    <div class="card-body" style="padding:10px">
+      <div class="nav-label" style="padding:0 9px 6px">สารบัญ</div>
+      <a href="#arch">สถาปัตยกรรมระบบ</a>
+      <a href="#roles">กลุ่มผู้ใช้งานและสิทธิ์</a>
+      <a href="#screens">รายละเอียดรายหน้าจอ</a>
+      <a href="#coverage">ความครอบคลุมตามขอบเขตงาน</a>
+      <a href="#docs">เอกสารการออกแบบระบบ</a>
+      <div class="nav-label" style="padding:12px 9px 6px">หน้าจอตามกลุ่มงาน</div>
+      <div id="jumpScreens"></div>
+    </div>
+  </nav>
+
+  <div class="stack">
+    <div class="anchor" id="arch"><div class="card mb24">
+  <div class="card-head"><h2>สถาปัตยกรรมระบบโดยสังเขป</h2><span class="spacer"></span>
+    <span class="hint">ภาพที่ 1 — ภาพรวมองค์ประกอบระบบ</span></div>
+  <div class="card-body">
+    <div class="erd-scroll">
+      <svg viewBox="0 0 960 420" role="img" aria-label="แผนภาพสถาปัตยกรรมระบบ 4 ชั้น: ผู้ใช้งาน, การนำเสนอ, บริการ, ข้อมูล">
+        <defs>
+          <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+            <path d="M0 0 L10 5 L0 10 z" fill="var(--line-strong)"/>
+          </marker>
+          <style>
+            .bx { fill: var(--surface-1); stroke: var(--line-strong); stroke-width: 1.2; }
+            .lane { fill: var(--surface-2); stroke: var(--line); stroke-width: 1; }
+            .lt { font: 600 11px var(--font); fill: var(--ink-3); letter-spacing: .06em; text-transform: uppercase; }
+            .bt { font: 600 12.5px var(--font); fill: var(--ink-1); }
+            .bs { font: 400 10.5px var(--font); fill: var(--ink-3); }
+            .ln { stroke: var(--line-strong); stroke-width: 1.3; fill: none; marker-end: url(#ah); }
+            .lnl { font: 500 9.5px var(--mono); fill: var(--ink-3); }
+          </style>
+        </defs>
+
+        <!-- lane 1: users -->
+        <rect class="lane" x="10" y="10" width="940" height="82" rx="10"/>
+        <text class="lt" x="24" y="30">1 · ผู้ใช้งาน</text>
+        <g>
+          <rect class="bx" x="40"  y="38" width="188" height="40" rx="8"/>
+          <text class="bt" x="56" y="56">ผู้อ่านข้อมูล</text><text class="bs" x="56" y="70">ผู้บริหาร · เจ้าหน้าที่กองอื่น</text>
+          <rect class="bx" x="252" y="38" width="188" height="40" rx="8"/>
+          <text class="bt" x="268" y="56">ผู้ป้อนข้อมูล</text><text class="bs" x="268" y="70">เจ้าหน้าที่สำรวจภาคสนาม</text>
+          <rect class="bx" x="464" y="38" width="188" height="40" rx="8"/>
+          <text class="bt" x="480" y="56">ผู้ใช้งานทั้งสองสิทธิ์</text><text class="bs" x="480" y="70">ผู้ตรวจสอบ/อนุมัติข้อมูล</text>
+          <rect class="bx" x="676" y="38" width="236" height="40" rx="8"/>
+          <text class="bt" x="692" y="56">ผู้ดูแลระบบ · ประชาชน (ยื่นข้อเสนอ)</text>
+          <text class="bs" x="692" y="70">ตั้งค่าระบบ · ข้อเสนอผ่านช่องทางสาธารณะ</text>
+        </g>
+
+        <!-- lane 2: presentation -->
+        <rect class="lane" x="10" y="108" width="940" height="82" rx="10"/>
+        <text class="lt" x="24" y="128">2 · ชั้นการนำเสนอ</text>
+        <rect class="bx" x="40"  y="136" width="208" height="40" rx="8"/>
+        <text class="bt" x="56" y="154">Web GIS (Responsive)</text><text class="bs" x="56" y="168">แผนที่ · ตาราง · แดชบอร์ด</text>
+        <rect class="bx" x="272" y="136" width="208" height="40" rx="8"/>
+        <text class="bt" x="288" y="154">แอปสำรวจบนมือถือ</text><text class="bs" x="288" y="168">ทำงานออฟไลน์ · ซิงก์ภายหลัง</text>
+        <rect class="bx" x="504" y="136" width="196" height="40" rx="8"/>
+        <text class="bt" x="520" y="154">QGIS / ArcGIS Desktop</text><text class="bs" x="520" y="168">เชื่อมผ่าน WMS/WFS · GeoPackage</text>
+        <rect class="bx" x="724" y="136" width="188" height="40" rx="8"/>
+        <text class="bt" x="740" y="154">ชุดข้อมูลเปิด</text><text class="bs" x="740" y="168">ชุดเผยแพร่ที่ตัดข้อมูลอ่อนไหว</text>
+
+        <!-- lane 3: services -->
+        <rect class="lane" x="10" y="206" width="940" height="100" rx="10"/>
+        <text class="lt" x="24" y="226">3 · ชั้นบริการ (REST API / OGC)</text>
+        <rect class="bx" x="40"  y="234" width="150" height="58" rx="8"/>
+        <text class="bt" x="54" y="256">API Gateway</text><text class="bs" x="54" y="270">OAuth 2.0 / OIDC</text><text class="bs" x="54" y="283">Rate limit · Audit</text>
+        <rect class="bx" x="206" y="234" width="162" height="58" rx="8"/>
+        <text class="bt" x="220" y="256">Feature Service</text><text class="bs" x="220" y="270">CRUD · Workflow</text><text class="bs" x="220" y="283">Versioning · Attachment</text>
+        <rect class="bx" x="384" y="234" width="162" height="58" rx="8"/>
+        <text class="bt" x="398" y="256">Spatial Service</text><text class="bs" x="398" y="270">วิเคราะห์เชิงพื้นที่</text><text class="bs" x="398" y="283">ST_* ประมวลผลในฐานข้อมูล</text>
+        <rect class="bx" x="562" y="234" width="162" height="58" rx="8"/>
+        <text class="bt" x="576" y="256">Tile &amp; Map Service</text><text class="bs" x="576" y="270">ST_AsMVT · WMS/WFS</text><text class="bs" x="576" y="283">แคชไทล์</text>
+        <rect class="bx" x="740" y="234" width="172" height="58" rx="8"/>
+        <text class="bt" x="754" y="256">QC &amp; Export Worker</text><text class="bs" x="754" y="270">ตรวจคุณภาพตามกฎ</text><text class="bs" x="754" y="283">GeoPackage · PDF · XLSX</text>
+
+        <!-- lane 4: data -->
+        <rect class="lane" x="10" y="322" width="940" height="88" rx="10"/>
+        <text class="lt" x="24" y="342">4 · ชั้นข้อมูล</text>
+        <rect class="bx" x="40" y="350" width="300" height="48" rx="8" fill="var(--accent-wash)" stroke="var(--accent)"/>
+        <text class="bt" x="56" y="370">PostgreSQL 16 + PostGIS 3.4</text>
+        <text class="bs" x="56" y="385">schema: gis · ref · app · qc · audit · plan</text>
+        <rect class="bx" x="356" y="350" width="196" height="48" rx="8"/>
+        <text class="bt" x="372" y="370">Object Storage</text><text class="bs" x="372" y="385">ภาพถ่ายสำรวจ · ไฟล์แนบ · ไฟล์ส่งออก</text>
+        <rect class="bx" x="568" y="350" width="166" height="48" rx="8"/>
+        <text class="bt" x="584" y="370">แผนที่ฐาน</text><text class="bs" x="584" y="385">ภาพถ่ายทางอากาศ · OSM</text>
+        <rect class="bx" x="750" y="350" width="162" height="48" rx="8"/>
+        <text class="bt" x="766" y="370">สำรองข้อมูล</text><text class="bs" x="766" y="385">PITR รายวัน · เก็บ 30 รุ่น</text>
+
+        <!-- connectors -->
+        <path class="ln" d="M134 78 L134 132"/>
+        <path class="ln" d="M346 78 L376 132"/>
+        <path class="ln" d="M558 78 L600 132"/>
+        <path class="ln" d="M794 78 L818 132"/>
+        <path class="ln" d="M144 176 L115 230"/>
+        <path class="ln" d="M376 176 L287 230"/>
+        <path class="ln" d="M602 176 L643 230"/>
+        <path class="ln" d="M818 176 L826 230"/>
+        <text class="lnl" x="150" y="212">HTTPS / JWT</text>
+        <path class="ln" d="M115 292 L160 346"/>
+        <path class="ln" d="M287 292 L210 346"/>
+        <path class="ln" d="M465 292 L250 346"/>
+        <path class="ln" d="M643 292 L300 346"/>
+        <path class="ln" d="M826 292 L452 346"/>
+      </svg>
+    </div>
+    <p class="small muted mt16" style="margin-bottom:0">การวิเคราะห์เชิงพื้นที่ทั้งหมดประมวลผลด้วยฟังก์ชัน PostGIS
+      ในฐานข้อมูลโดยตรง ไม่ดึงข้อมูลทั้งชั้นขึ้นมาคำนวณฝั่งผู้ใช้ และแสดงผลด้วย Vector Tile เพื่อให้เปิดบนมือถือได้เร็ว</p>
+  </div>
+</div></div>
+
+    <div class="anchor" id="roles">
+      <h2 class="mb8">กลุ่มผู้ใช้งานและสิทธิ์</h2>
+      <p class="dim small mb16">ระบบแยกสิทธิ์เป็น 3 กลุ่มหลักตามลักษณะงาน และเพิ่มกลุ่มผู้ดูแลระบบสำหรับงานตั้งค่าและกำกับดูแล
+        สลับกลุ่มสิทธิ์เพื่อทดลองดูความแตกต่างได้จากปุ่มมุมขวาบนของหน้าจอใช้งาน
+        ตารางสิทธิ์ฉบับเต็มอยู่ที่หน้า <a href="users.html">ผู้ใช้งานและสิทธิ์</a></p>
+      <div class="grid g4 mb24" id="roleCards"></div>
+    </div>
+
+    <div class="anchor" id="screens">
+      <h2 class="mb8">รายละเอียดรายหน้าจอ</h2>
+      <p class="dim small mb16">แต่ละหน้าจอระบุวัตถุประสงค์ กลุ่มที่เปิดได้ กฎการทำงาน การจัดเก็บข้อมูล
+        API ที่เกี่ยวข้อง use case ที่รองรับ และมาตรฐานที่อ้างอิง</p>
+      <div id="screenSections"></div>
+    </div>
+
+    <div class="anchor" id="coverage"><div class="card mb24">
+  <div class="card-head"><h2>ความครอบคลุมตามข้อกำหนดขอบเขตของงาน</h2><span class="spacer"></span>
+    <span class="hint">ตารางที่ 1 — การเชื่อมโยงข้อกำหนดกับหน้าจอระบบ</span></div>
+  <div class="table-wrap">
+    <table class="tbl">
+      <thead><tr><th style="width:200px">ข้อกำหนด</th><th>สิ่งที่ระบบรองรับ</th><th style="width:220px">หน้าจอที่เกี่ยวข้อง</th></tr></thead>
+      <tbody>
+        <tr><td>จัดทำชั้นข้อมูลใหม่ไม่น้อยกว่า 8 ชั้น และเชื่อมโยงชั้นข้อมูลเดิม 2 ชั้น รวม 10 ชั้น</td>
+            <td>ทะเบียนชั้นข้อมูล 10 ชั้น พร้อมประเภทรูปทรง จำนวนรายการ ความครบถ้วน และสถานะการอนุมัติรายชั้น</td>
+            <td><a href="layers.html">ทะเบียนชั้นข้อมูล</a> · <a href="map.html">แผนที่</a></td></tr>
+        <tr><td>ชั้นข้อมูลถนนต้องจำแนกหน่วยงาน แยกเจ้าของทรัพย์สิน ผู้บำรุงรักษา และสถานะการยืนยัน</td>
+            <td>ฟิลด์ <code>owner_agency_id</code>, <code>maintainer_agency_id</code> และ <code>confirm_status_code</code> แยกกัน
+                พร้อมตัวกรองและสรุปรายหน่วยงาน ไม่สรุปจากการสังเกตภาคสนามเพียงอย่างเดียว</td>
+            <td><a href="attribute-table.html">ตารางข้อมูล</a> · <a href="data-entry.html">บันทึกข้อมูล</a></td></tr>
+        <tr><td>กำหนดระบบพิกัด หน่วย วิธีเก็บ และความแม่นยำเป้าหมายของแต่ละชั้นข้อมูล</td>
+            <td>บันทึกระบบพิกัด ความแม่นยำเป้าหมาย และความแม่นยำที่วัดได้รายรายการ ใน Metadata และฟิลด์ <code>positional_accuracy_m</code></td>
+            <td><a href="metadata.html">Metadata</a> · <a href="data-dictionary.html">พจนานุกรมข้อมูล</a></td></tr>
+        <tr><td>ทุกรายการต้องมีรหัสไม่ซ้ำ แหล่งข้อมูล วันที่สำรวจ หน่วยงานรับผิดชอบหรือสถานะรอยืนยัน และคำอธิบายข้อมูล</td>
+            <td>ชุดฟิลด์มาตรฐาน 21 ฟิลด์ที่บังคับใช้กับทุกชั้นข้อมูล พร้อมข้อจำกัดระดับฐานข้อมูล (UNIQUE, NOT NULL, CHECK)</td>
+            <td><a href="data-dictionary.html">พจนานุกรมข้อมูล</a> · <a href="db-design.html">การออกแบบฐานข้อมูล</a></td></tr>
+        <tr><td>ตรวจสอบความครบถ้วนของฟิลด์บังคับ ความซ้ำซ้อน พิกัด และความสัมพันธ์เชิงพื้นที่ พร้อมรายงานผลตรวจคุณภาพ</td>
+            <td>กฎการตรวจคุณภาพ 12 กฎใน 6 หมวด เรียกตรวจได้ทั้งแบบตามรอบและตามคำสั่ง พร้อมรายงานและการติดตามการแก้ไข</td>
+            <td><a href="qc.html">ตรวจคุณภาพข้อมูล</a></td></tr>
+        <tr><td>นำเข้าและเชื่อมโยงข้อมูลเดิมที่หน่วยงานมีอยู่แล้ว โดยไม่จัดทำซ้ำ</td>
+            <td>นำเข้าไฟล์ GeoJSON, KML/KMZ และ Shapefile (ZIP) รองรับรูปทรงทั้งสามแบบ คือจุด เส้น และรูปปิด
+                พร้อมแปลงระบบพิกัดเป็น EPSG:4326 จับคู่ฟิลด์กับชุดฟิลด์มาตรฐาน และตรวจคุณภาพก่อนบันทึก</td>
+            <td><a href="import.html">นำเข้าข้อมูลจากไฟล์</a></td></tr>
+        <tr><td>ส่งมอบ GeoPackage, โครงการ QGIS, แผนที่ PDF, ตาราง XLSX/CSV, พจนานุกรมข้อมูล, Metadata, สัญลักษณ์, คู่มือ และบัญชีไฟล์</td>
+            <td>หน้าส่งออกรวมทุกรูปแบบในชุดเดียว พร้อมบัญชีไฟล์ (manifest) รุ่นข้อมูล และใช้พาธสัมพัทธ์เพื่อย้ายเครื่องได้</td>
+            <td><a href="export.html">ส่งออกและเผยแพร่</a></td></tr>
+        <tr><td>แยกฐานข้อมูลใช้งานภายในกับชุดเผยแพร่ที่ตัดข้อมูลส่วนบุคคลและข้อมูลความปลอดภัย</td>
+            <td>โปรไฟล์การเผยแพร่ 3 โปรไฟล์ ตัดชั้นข้อมูล CCTV และฟิลด์อ่อนไหวอัตโนมัติ พร้อมรายการเปรียบเทียบก่อนเผยแพร่</td>
+            <td><a href="export.html">ส่งออกและเผยแพร่</a></td></tr>
+        <tr><td>จัดทำบัญชีพื้นที่ที่แนวเขตยังไม่ยุติ และข้อเสนอให้ข้อมูลแนวเขตสอดคล้องกัน</td>
+            <td>เปรียบเทียบแนวเขตตามเอกสารอ้างอิงกับแนวเขตจัดเก็บจริง คำนวณพื้นที่คลาดเคลื่อน จำนวนแปลงและอาคารที่กระทบ</td>
+            <td><a href="boundary.html">วิเคราะห์แนวเขต</a></td></tr>
+        <tr><td>เสนอระบบติดตามผล ตัวชี้วัด รอบทบทวนแผน ผู้รับผิดชอบปรับปรุงข้อมูล และแนวทางสำรองข้อมูล</td>
+            <td>ตัวชี้วัด 8 ตัวพร้อมเป้าหมายและรอบการวัด ตารางผู้รับผิดชอบรายชั้นข้อมูล และนโยบายสำรอง/ส่งต่อฐานข้อมูล</td>
+            <td><a href="monitoring.html">ตัวชี้วัดและการติดตาม</a></td></tr>
+        <tr><td>ฝึกอบรมเจ้าหน้าที่ให้เปิด แก้ไข ค้นหา วิเคราะห์ และปรับปรุงฐานข้อมูลได้</td>
+            <td>หน้าจอออกแบบให้ใช้งานได้โดยไม่ต้องติดตั้งโปรแกรม พร้อมคู่มือในระบบ และยังส่งมอบโครงการ QGIS สำหรับงานขั้นสูง</td>
+            <td><a href="map.html">แผนที่</a> · <a href="export.html">ส่งออก</a></td></tr>
+      </tbody>
+    </table>
+  </div>
+</div></div>
+
+    <div class="anchor" id="docs">
+      <h2 class="mb8">เอกสารการออกแบบระบบ</h2>
+      <p class="dim small mb16">เอกสารฉบับเต็มของการออกแบบระบบ แยกเป็นหน้าของตนเอง</p>
+      <div class="doccards mb24" id="docCards"></div>
+    </div>
+
+    <div class="notice notice-warn mb24" id="scopeNote"></div>
+  </div>
+</div>
+
+<footer class="small muted center" style="padding:24px 0">
+  GeoCore GIS — เอกสารรายละเอียดระบบงาน · ชื่อระบบ หน่วยงาน และตัวเลขทั้งหมดเป็นค่าสมมุติเพื่อการสาธิต
+</footer>
+`;
+
+/* ---------- กลุ่มผู้ใช้งาน ---------- */
+document.getElementById('roleCards').innerHTML = Object.values(ROLES).map(r => `
+  <div class="card"><div class="card-body">
+    <div class="row row-tight" style="margin-bottom:6px">
+      <span style="width:9px;height:9px;border-radius:50%;background:${r.color}"></span>
+      <strong>${r.name}</strong>
+    </div>
+    <div class="xsmall muted mb8">${r.en}</div>
+    <p class="small dim" style="min-height:44px">${r.desc}</p>
+    <div class="xsmall" style="font-weight:650;color:var(--good-ink);margin-top:6px">ทำได้</div>
+    <ul class="xsmall dim" style="padding-left:16px;margin:3px 0 8px">${r.can.map(c => `<li>${c}</li>`).join('')}</ul>
+    <div class="xsmall" style="font-weight:650;color:var(--critical)">ทำไม่ได้</div>
+    <ul class="xsmall dim" style="padding-left:16px;margin:3px 0 0">${r.cannot.map(c => `<li>${c}</li>`).join('')}</ul>
+  </div></div>`).join('');
+
+/* ---------- รายละเอียดรายหน้าจอ ---------- */
+document.getElementById('screenSections').innerHTML = GROUPS.map(g => {
+  const items = SCREEN_DOCS.filter(s => s.grp === g);
+  return `<div class="card mb16">
+    <div class="card-head"><h2>${g}</h2><span class="spacer"></span>
+      <span class="badge badge-outline">${items.length} หน้าจอ</span></div>
+    <div class="card-body">${items.map(screenDetail).join('')}</div>
+  </div>`;
+}).join('');
+
+document.getElementById('jumpScreens').innerHTML = SCREEN_DOCS.map(s =>
+  `<a href="#${s.id}">${s.name}</a>`).join('');
+
+/* ---------- เอกสารการออกแบบ ---------- */
+document.getElementById('docCards').innerHTML = DESIGN_DOCS.map(d => `
+  <a class="doccard" href="${d[0]}">
+    <span class="ic">${icon(d[1])}</span>
+    <h3>${d[2]}</h3><p>${d[3]}</p></a>`).join('');
+
+/* ---------- ปุ่มเครื่องมือ ---------- */
+let allOpen = false;
+const btnOpen = document.getElementById('btnOpen');
+btnOpen.onclick = () => {
+  allOpen = !allOpen;
+  document.querySelectorAll('details.acc').forEach(d => { d.open = allOpen; });
+  btnOpen.innerHTML = `${icon(allOpen ? 'x' : 'plus')} ${allOpen ? 'ย่อทั้งหมด' : 'ขยายทั้งหมด'}`;
+};
+
+/* เปิดรายละเอียดของหน้าจอที่ถูกอ้างถึงด้วย # ในลิงก์จากแถบบน */
+function openFromHash() {
+  const id = decodeURIComponent(location.hash.slice(1));
+  if (!id) return;
+  const el = document.getElementById(id);
+  if (el && el.tagName === 'DETAILS') { el.open = true; el.scrollIntoView({ block: 'start' }); }
+}
+
+/* ---------- ขอบเขตที่ต้องตกลงก่อนเริ่มงาน ---------- */
+document.getElementById('scopeNote').innerHTML = `${icon('warn')}<div>
+  <strong>ขอบเขตที่ต้องตกลงให้ชัดเจนก่อนเริ่มงาน</strong>
+  ข้อกำหนดขอบเขตของงานฉบับที่ใช้เป็นต้นแบบระบุว่า การส่งมอบครอบคลุม <em>ฐานข้อมูลและไฟล์ส่งมอบ</em>
+  โดย <em>ไม่รวม</em> การพัฒนาระบบ Web GIS และการจัดซื้อเครื่องแม่ข่าย เว้นแต่ระบุเพิ่มก่อนประกาศจ้าง
+  ต้นแบบหน้าจอชุดนี้จึงมีสถานะเป็น <strong>ข้อเสนอส่วนขยาย</strong> เพื่อประกอบการพิจารณาว่าจะเพิ่มขอบเขตหรือไม่
+  หากไม่เพิ่ม ข้อกำหนดเดิมยังรองรับได้ด้วยการส่งมอบ GeoPackage และโครงการ QGIS ตามหน้า
+  <a href="export.html">ส่งออกและเผยแพร่</a></div>`;
+
+window.addEventListener('hashchange', openFromHash);
+openFromHash();
+</script>
+</body>
+</html>

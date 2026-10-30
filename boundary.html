@@ -34,7 +34,7 @@ const totalBld = BOUNDARY.reduce((s, b) => s + b.bld, 0);
 
 root.innerHTML = `
 ${pageHead({
-  crumbs: ['<a href="index.html">หน้าแรก</a>', 'วิเคราะห์แนวเขต'],
+  crumbs: ['<a href="dashboard.html">หน้าแรก</a>', 'วิเคราะห์แนวเขต'],
   title: 'วิเคราะห์แนวเขตและพื้นที่คลาดเคลื่อน',
   badge: badge(BOUNDARY.length + ' พื้นที่', 'warning'),
   sub: 'เปรียบเทียบแนวเขตตามเอกสารอ้างอิงกับแนวเขตจัดเก็บที่ใช้งานจริง พร้อมบัญชีพื้นที่ หลักฐาน และข้อเสนอแนวทางดำเนินการ',
@@ -102,8 +102,6 @@ ${pageHead({
         <td class="small">${b.note}</td></tr>`).join('')}</tbody>
     </table>
   </div>
-  <div class="card-foot">คำนวณพื้นที่ด้วย <code>ST_Area(ST_SymDifference(ref.geom, actual.geom)::geography)</code>
-    และนับแปลง/อาคารด้วย <code>ST_Intersects</code> กับชั้นข้อมูลเดิม L09 และ L10</div>
 </div>
 
 <div class="grid g2">
@@ -183,7 +181,7 @@ document.getElementById('areaChart').innerHTML =
      <span class="li"><span class="sw" style="background:var(--good)"></span>ยุติแล้ว</span></div>
      <dl class="kv mt16"><dt>พื้นที่รวม</dt><dd><b>${totalArea.toFixed(2)} ไร่</b></dd>
      <dt>คิดเป็น</dt><dd>${(totalArea * 1600).toLocaleString('th-TH')} ตร.ม.</dd>
-     <dt>วิธีคำนวณ</dt><dd class="small">ST_SymDifference บนระบบพิกัด EPSG:32647</dd></dl>`;
+     <dt>วิธีคำนวณ</dt><dd class="small">เทียบรูปทรงบนระบบพิกัด EPSG:32647</dd></dl>`;
 
 document.getElementById('btnExport').onclick = () => toast('ส่งออกบัญชีพื้นที่คลาดเคลื่อนเป็น XLSX พร้อมแผนที่ PDF รายพื้นที่', 'download');
 const bn = document.getElementById('btnNew'); if (bn) bn.onclick = () => location.href = 'data-entry.html';

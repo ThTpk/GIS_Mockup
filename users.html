@@ -35,7 +35,7 @@ const cell = v => v === 'full'
 
 root.innerHTML = `
 ${pageHead({
-  crumbs: ['<a href="index.html">หน้าแรก</a>', 'ผู้ใช้งานและสิทธิ์'],
+  crumbs: ['<a href="dashboard.html">หน้าแรก</a>', 'ผู้ใช้งานและสิทธิ์'],
   title: 'ผู้ใช้งานและกลุ่มสิทธิ์',
   sub: 'กลุ่มสิทธิ์หลัก 3 กลุ่มตามลักษณะงาน (อ่าน / ป้อน / ทั้งสองอย่าง) และกลุ่มผู้ดูแลระบบสำหรับงานตั้งค่า',
   actions: `<button class="btn" id="btnMatrix">${icon('download')} ส่งออกตารางสิทธิ์</button>
@@ -58,8 +58,7 @@ ${pageHead({
       <tbody id="pageAccess"></tbody>
     </table>
   </div>
-  <div class="card-foot">หน้าที่ไม่ได้ระบุข้อจำกัดไว้ เปิดได้ทุกกลุ่มสิทธิ์
-    การจำกัดนี้บังคับทั้งที่เมนู ที่ลิงก์ภายในหน้า และที่ตัวหน้าเองเมื่อเปิด URL ตรง</div>
+  <div class="card-foot">หน้าที่ไม่ได้ระบุข้อจำกัดไว้ เปิดได้ทุกกลุ่มสิทธิ์</div>
 </div>
 
 <div class="card mb16">

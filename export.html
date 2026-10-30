@@ -31,7 +31,7 @@ const root = document.getElementById('root');
 
 root.innerHTML = `
 ${pageHead({
-  crumbs: ['<a href="index.html">หน้าแรก</a>', 'ส่งออกและเผยแพร่'],
+  crumbs: ['<a href="dashboard.html">หน้าแรก</a>', 'ส่งออกและเผยแพร่'],
   title: 'ส่งออกและเผยแพร่ชุดข้อมูล',
   sub: 'จัดชุดส่งมอบตามรูปแบบที่กำหนด พร้อมบัญชีไฟล์ รุ่นข้อมูล และชุดเผยแพร่ที่ตัดข้อมูลอ่อนไหวออก',
   actions: `<button class="btn" id="btnJobs">${icon('history')} ประวัติการส่งออก</button>
@@ -206,8 +206,7 @@ ${pageHead({
         <tbody id="manifest"></tbody>
       </table>
     </div>
-    <div class="card-foot">บัญชีไฟล์ระบุขนาด จำนวนรายการ รุ่นข้อมูล และค่าแฮชของทุกไฟล์
-      เพื่อให้ผู้ว่าจ้างตรวจรับได้ว่าไฟล์ครบถ้วนและไม่ถูกแก้ไขระหว่างส่งมอบ</div>
+    <div class="card-foot">บัญชีไฟล์ระบุขนาด จำนวนรายการ รุ่นข้อมูล และค่าแฮชของทุกไฟล์ในชุด</div>
   </div>
 </div>
 

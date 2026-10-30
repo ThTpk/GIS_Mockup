@@ -779,3 +779,6 @@ a.link-disabled {
 }
 a.link-disabled:hover { transform: none; box-shadow: var(--shadow-sm); }
 a.screencard.link-disabled .ic { background: var(--surface-3); color: var(--ink-3); }
+
+/* ซ่อนข้อความของปุ่มบนแถบบนเมื่อจอแคบ เหลือเฉพาะไอคอน */
+@media (max-width: 900px) { .hide-sm { display: none; } }

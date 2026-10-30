@@ -32,7 +32,7 @@ const root = document.getElementById('root');
 
 root.innerHTML = `
 ${pageHead({
-  crumbs: ['<a href="index.html">หน้าแรก</a>', '<a href="attribute-table.html">ตารางข้อมูล</a>', 'บันทึกข้อมูล'],
+  crumbs: ['<a href="dashboard.html">หน้าแรก</a>', '<a href="attribute-table.html">ตารางข้อมูล</a>', 'บันทึกข้อมูล'],
   title: 'บันทึกรายการใหม่',
   badge: badge('ร่าง · ยังไม่ส่งตรวจ', 'outline'),
   sub: 'ฟอร์มใช้ชุดฟิลด์มาตรฐานเดียวกันทุกชั้นข้อมูล ระบบตรวจค่าก่อนบันทึกและสร้างรหัสรายการให้อัตโนมัติ',
@@ -188,8 +188,7 @@ ${pageHead({
     <div class="card">
       <div class="card-head"><h2>ผลการตรวจค่าก่อนบันทึก</h2></div>
       <div class="card-body" id="validate"></div>
-      <div class="card-foot xsmall">ตรวจด้วยกฎชุดเดียวกับการตรวจคุณภาพข้อมูล (dry-run ผ่าน
-        <code>POST /features/validate</code>)</div>
+      <div class="card-foot xsmall">ตรวจด้วยกฎชุดเดียวกับหน้าตรวจคุณภาพข้อมูล</div>
     </div>
 
     <div class="card">
