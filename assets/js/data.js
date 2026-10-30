@@ -701,6 +701,7 @@ const NAV = [
     { href: 'audit-log.html',       icon: 'history',  text: 'บันทึกการใช้งาน' }
   ]},
   { label: 'เอกสารออกแบบระบบ', items: [
+    { href: 'usecase-spec.html',    icon: 'check',   text: 'ข้อกำหนด Use Case', tag: '57' },
     { href: 'db-design.html',       icon: 'db',      text: 'การออกแบบฐานข้อมูล' },
     { href: 'data-dictionary.html', icon: 'book',    text: 'พจนานุกรมข้อมูล' },
     { href: 'api-list.html',        icon: 'plug',    text: 'รายการ API' },
