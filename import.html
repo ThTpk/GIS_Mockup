@@ -13,7 +13,16 @@
 <style>
   .steps { display: flex; gap: 0; margin-bottom: 20px; flex-wrap: wrap; }
   .steps .st { flex: 1 1 160px; display: flex; align-items: center; gap: 9px; padding: 11px 13px;
-    border: 1px solid var(--line); background: var(--surface-1); min-width: 0; }
+    border: 1px solid var(--line); background: var(--surface-1); min-width: 0;
+    font: inherit; text-align: left; cursor: pointer; transition: background .12s, border-color .12s; }
+  .steps .st:hover { background: var(--surface-2); border-color: var(--line-strong); z-index: 1; }
+  .steps .st:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; z-index: 2; }
+  .steps .st.on:hover { background: var(--accent-wash); }
+  .steps .st .go { margin-left: auto; font-size: .68rem; color: var(--ink-3); white-space: nowrap; opacity: 0; }
+  .steps .st:hover .go, .steps .st:focus-visible .go { opacity: 1; }
+  .steps-hint { font-size: .78rem; color: var(--ink-3); margin: -14px 0 20px; display: flex;
+    align-items: center; gap: 6px; }
+  .steps-hint svg { width: 13px; height: 13px; flex: 0 0 13px; }
   .steps .st:first-child { border-radius: var(--r-md) 0 0 var(--r-md); }
   .steps .st:last-child { border-radius: 0 var(--r-md) var(--r-md) 0; }
   .steps .st + .st { border-left: 0; }
@@ -204,6 +213,9 @@ ${pageHead({
 })}
 
 <div class="steps" id="steps"></div>
+<div class="steps-hint">${icon('info')}
+  <span>กดที่ขั้นตอนใดก็ได้เพื่อดูตัวอย่างหน้าจอของขั้นนั้น
+    หากยังไม่ได้เลือกไฟล์ ระบบจะใช้ไฟล์ตัวอย่างให้อัตโนมัติ</span></div>
 
 <div id="panel"></div>
 
@@ -226,11 +238,37 @@ ${pageHead({
 /* ---------- ตัวบอกขั้นตอน ---------- */
 const STEP_NAMES = ['เลือกไฟล์', 'ตรวจไฟล์และระบบพิกัด', 'จับคู่ฟิลด์', 'ตรวจสอบและยืนยัน'];
 function paintSteps() {
-  document.getElementById('steps').innerHTML = STEP_NAMES.map((n, i) => {
+  const box = document.getElementById('steps');
+  box.innerHTML = STEP_NAMES.map((n, i) => {
     const k = i + 1;
-    return `<div class="st ${k === step ? 'on' : k < step ? 'done' : ''}">
-      <span class="n">${k < step ? '✓' : k}</span><span class="t">${n}</span></div>`;
+    const on = k === step;
+    return `<button type="button" class="st ${on ? 'on' : k < step ? 'done' : ''}" data-goto="${k}"
+      ${on ? 'aria-current="step"' : ''} title="ดูตัวอย่างหน้าจอขั้นที่ ${k} — ${n}">
+      <span class="n">${k < step ? '✓' : k}</span><span class="t">${n}</span>
+      ${on ? '' : '<span class="go">ดูตัวอย่าง</span>'}</button>`;
   }).join('');
+  box.querySelectorAll('[data-goto]').forEach(b =>
+    b.onclick = () => gotoStep(Number(b.dataset.goto)));
+}
+
+/* ข้ามไปดูตัวอย่างหน้าจอของขั้นใดก็ได้ ไม่ต้องเดินตามลำดับ */
+function gotoStep(k) {
+  if (k === step) return;
+  /* ออกจากขั้นที่ 2 ยังต้องผ่านการตรวจชนิดรูปทรงเหมือนเดิม ไม่ลัดกฎ */
+  if (step === 2 && k > 2 && cur) {
+    const sel = document.getElementById('tgtLayer');
+    if (sel) {
+      if (!compat(cur.geomType, TARGET_GEOM[sel.value]).ok)
+        return toast('ชนิดรูปทรงไม่ตรงกับชั้นข้อมูลปลายทาง — เลือกชั้นข้อมูลใหม่ก่อน', 'warn');
+      cur = Object.assign({}, cur, { target: sel.value });
+    }
+  }
+  if (k > 1 && !cur) {
+    cur = DEMOS.geojson;
+    toast(`ยังไม่ได้เลือกไฟล์ — ใช้ไฟล์ตัวอย่าง ${cur.file} เพื่อแสดงหน้าจอขั้นที่ ${k}`, 'info');
+  }
+  step = k; pmap = null; render();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
 /* ---------- ขั้นตอนที่ 1 ---------- */
