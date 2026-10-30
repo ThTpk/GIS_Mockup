@@ -31,6 +31,7 @@ function setRole(r) {
   paintRolePill();
   toast(`สลับเป็นกลุ่มสิทธิ์: ${ROLES[r].name}`, 'check');
   document.dispatchEvent(new CustomEvent('rolechange', { detail: r }));
+  paintSidebar();
   guardLinks();
   /* ถ้ากลุ่มสิทธิ์ใหม่เข้าหน้าปัจจุบันไม่ได้ ให้โหลดหน้าใหม่เพื่อให้ตัวกันหน้าทำงาน */
   if (!canAccess(location.pathname)) setTimeout(() => location.reload(), 600);
@@ -150,8 +151,36 @@ function modal(title, bodyHTML, footHTML) {
   return { el: bg, close };
 }
 
+/* ---------- เมนูข้าง ---------- */
+let ACTIVE_HREF = '';
+
+function sidebarHTML() {
+  return NAV.map(g => `
+    <div class="nav-group">
+      <div class="nav-label">${g.label}</div>
+      ${g.items.map(i => canAccess(i.href)
+        ? `<a class="nav-item${i.href === ACTIVE_HREF ? ' active' : ''}" href="${i.href}">
+             ${icon(i.icon)}<span>${i.text}</span>${i.tag ? `<span class="tag">${i.tag}</span>` : ''}</a>`
+        : `<span class="nav-item disabled" aria-disabled="true" title="${accessTitle(i.href)}">
+             ${icon(i.icon)}<span>${i.text}</span>${icon('lock', 'lk')}</span>`).join('')}
+    </div>`).join('') + `
+    <div class="nav-group" style="padding:0 10px">
+      <div class="xsmall muted" style="border-top:1px solid var(--line);padding-top:12px;line-height:1.5">
+        ${APP.name} ${APP.version}<br>${APP.db}<br>
+        <span style="color:var(--ink-3)">ข้อมูลตัวอย่างเพื่อการนำเสนอ</span>
+      </div>
+    </div>`;
+}
+
+/* วาดเมนูข้างใหม่ให้ตรงกับกลุ่มสิทธิ์ปัจจุบัน ใช้ตอนสลับกลุ่มสิทธิ์โดยไม่โหลดหน้าใหม่ */
+function paintSidebar() {
+  const side = document.querySelector('.sidebar');
+  if (side) side.innerHTML = sidebarHTML();
+}
+
 /* ---------- shell render ---------- */
 function renderShell(activeHref) {
+  ACTIVE_HREF = activeHref;
   const body = document.body;
   body.setAttribute('data-role', currentRole());
 
@@ -178,21 +207,7 @@ function renderShell(activeHref) {
   const side = document.createElement('nav');
   side.className = 'sidebar';
   side.setAttribute('aria-label', 'เมนูหลัก');
-  side.innerHTML = NAV.map(g => `
-    <div class="nav-group">
-      <div class="nav-label">${g.label}</div>
-      ${g.items.map(i => canAccess(i.href)
-        ? `<a class="nav-item${i.href === activeHref ? ' active' : ''}" href="${i.href}">
-             ${icon(i.icon)}<span>${i.text}</span>${i.tag ? `<span class="tag">${i.tag}</span>` : ''}</a>`
-        : `<span class="nav-item disabled" aria-disabled="true" title="${accessTitle(i.href)}">
-             ${icon(i.icon)}<span>${i.text}</span>${icon('lock', 'lk')}</span>`).join('')}
-    </div>`).join('') + `
-    <div class="nav-group" style="padding:0 10px">
-      <div class="xsmall muted" style="border-top:1px solid var(--line);padding-top:12px;line-height:1.5">
-        ${APP.name} ${APP.version}<br>${APP.db}<br>
-        <span style="color:var(--ink-3)">ข้อมูลตัวอย่างเพื่อการนำเสนอ</span>
-      </div>
-    </div>`;
+  side.innerHTML = sidebarHTML();
 
   const shell = document.createElement('div');
   shell.className = 'shell';
